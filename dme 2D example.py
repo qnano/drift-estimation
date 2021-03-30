@@ -4,7 +4,9 @@ Example that uses the photonpy library to
 - perform drift estimation using the minimum entropy method
 - compare with the ground truth drift data
 
-See https://github.com/qnano/photonpy/blob/master/cpp/SMLMLib/DriftEstimation.cu for the actual algorithm
+See https://github.com/qnano/photonpy/blob/master/cpp/SMLMLib/DriftEstimation.cu for the algorithm implementation.
+
+photonpy can be installed following https://github.com/qnano/photonpy/blob/master/README.md
 """
 from photonpy import Context,Dataset,GaussianPSFMethods
 import numpy as np
