@@ -79,7 +79,7 @@ rmsd = np.sqrt(np.mean((drift_trace-gt_drift)**2, 0))
 print(f"RMSD of drift estimation: {rmsd} pixels")
 
 # Compare with ground truth
-fig,ax=plt.subplots(2,1,figsize=(8,6))
+fig,ax=plt.subplots(2,1,figsize=(8,6),sharex=True)
 for i in range(2):
     ax[i].plot(drift_trace[:,i], label='Estimated drift')
     ax[i].plot(gt_drift[:,i]+0.1, label='Ground truth')
@@ -88,5 +88,7 @@ for i in range(2):
         
     axname=['X', 'Y'][i]
     ax[i].set_title(f'{axname} drift')
+    ax[i].set_ylabel('Drift [pixels]')
+ax[1].set_xlabel('Frame')
 plt.tight_layout()
 
