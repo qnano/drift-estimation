@@ -1,22 +1,47 @@
 Example code for "Drift correction in localization microscopy using entropy minimization"
 -----------------------------------------------------------------------------------------
 
-To run this, currently a Windows 64-bit PC is required with CUDA 10.2 installed. 
-The algorithm is able to run on CPU only - we're working on removing the CUDA dependency from the code and making a standalone demo.
+Article link:
+https://www.biorxiv.org/content/10.1101/2021.03.30.437682v1
 
-Step 1. 
-Install python. Anaconda is recommended: https://www.anaconda.com/distribution/
+There are two options:
 
-Step 2.
-Create a virtual environment, such as an anaconda environment:
+* Standalone example, able to run on CUDA-free PCs.
+  See dme_example.py
+  
+* Example using photonpy library, which demonstrates the full SMLM pipeline. Currently requires CUDA, but we're working on making that optional:
+  See dme_photonpy_example.py
+ 
 
+To run dme_example.py:
+----------------------
+
+1. Install python. Anaconda is recommended: https://www.anaconda.com/distribution/
+2. Create a virtual environment, such as an anaconda environment:
+
+```
 conda create -n myenv anaconda python=3.8
 conda activate myenv
+```
 
-Step 3.
-Install photonpy:
+3. Install required pip packages, installing these within the virtual environment:
 
+```
+pip install tqdm scipy numpy matplotlib 
+```
+
+4.  Run the example code:
+
+```
+python dme_example.py
+```
+
+To run dme_photonpy_example.py
+------------------------------
+
+1. Install CUDA toolkit 10.2 update 2.
+2. Install photonpy library. Only windows 64-bit at the moment:
+
+```
 pip install photonpy
-
-Step 4.  Run the example code:
-python drift-estimation-example.py
+```
