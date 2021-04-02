@@ -19,7 +19,7 @@ def smlm_simulation(
         loc_error, # localization error XYZ 
         n_sites, # number of locations where molecules blink on and off
         n_frames,
-        on_prob = 0.05, # probability of a binding site generating a localization in a frame
+        on_prob = 0.1, # probability of a binding site generating a localization in a frame
         ): 
     
     """
@@ -54,7 +54,7 @@ drift_trace -= drift_trace.mean(0)
 
 
 localizations, framenum = smlm_simulation(drift_trace, fov_width, loc_error, 
-                                          n_sites=400,
+                                          n_sites=200,
                                           n_frames=n_frames)
 print(f"Total localizations: {len(localizations)}")
 
@@ -81,3 +81,4 @@ for i in range(3):
     unit = ['px', 'px', 'um'][i]
     ax[i].set_ylabel(f'Drift [{unit}]')
 ax[0].legend()
+plt.tight_layout()
