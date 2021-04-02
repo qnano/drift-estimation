@@ -44,10 +44,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\DME\DriftEstimation.cu" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="..\DME\StringUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DME\DriftEstimation.cu">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
