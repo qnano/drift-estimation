@@ -344,7 +344,7 @@ template<int D>
 class PerFrameMinEntropyDriftEstimator : public LocalizationDriftEstimator<D>
 {
 public:
-	typedef LocalizationDriftEstimator<D> Base;  
+	typedef LocalizationDriftEstimator<D> base; // this is required due to the C++ rules of name lookup and the base class being templated
 	typedef LocalizationDriftEstimator<D>::Pt Pt;
 	Pt sigma;
 
@@ -353,27 +353,27 @@ public:
 
 	virtual std::vector<Pt> InitializeDriftState(const Pt* driftPerFrame)
 	{
-		return std::vector<Pt>(driftPerFrame, driftPerFrame + Base::NumFrames());
+		return std::vector<Pt>(driftPerFrame, driftPerFrame + base::NumFrames());
 	}
 
 	// Compute drift per frame from the drift state
 	virtual std::vector<Pt> ComputeDriftPerFrame()
 	{
-		return std::vector<Pt>(driftState.begin(), driftState.end());
+		return std::vector<Pt>(base::driftState.begin(), base::driftState.end());
 	}
 
 	virtual std::pair<double, std::vector<Pt>> ComputeDriftDelta(double lastScore)
 	{
-		double score = UpdateDeltas(lastScore);
+		double score = base::UpdateDeltas(lastScore);
 
-		std::vector<Pt> stateDelta(NumFrames());
+		std::vector<Pt> stateDelta(base::NumFrames());
 
-		ParallelFor(NumFrames(), [&](int f) {
+		ParallelFor(base::NumFrames(), [&](int f) {
 			// compute derivative for drift sx_f, sy_f
 			Pt xy;
-			for (int i = 0; i < sifCount[f]; i++) {
-				int sif = sifList[sifStart[f] + i];
-				xy += deltaDriftPerSpot[sif];
+			for (int i = 0; i < base::sifCount[f]; i++) {
+				int sif = base::sifList[base::sifStart[f] + i];
+				xy += base::deltaDriftPerSpot[sif];
 			}
 			stateDelta[f] = xy;
 			});
@@ -414,18 +414,18 @@ template<int D>
 class SplineBasedMinEntropyDriftEstimator : public LocalizationDriftEstimator<D>
 {
 public:
+	typedef LocalizationDriftEstimator<D> base;
 	typedef LocalizationDriftEstimator<D>::Pt Pt;
 	int framesPerBin;
 
 	SplineBasedMinEntropyDriftEstimator(const Pt* xy, const Pt* crlb, 
-		const int* spotFramenum, int numspots, int framesPerBin, bool cuda, bool constCRLB) :
-		LocalizationDriftEstimator(xy, crlb, spotFramenum, numspots, cuda, constCRLB),
+		const int* spotFramenum, int numspots, int framesPerBin, bool cuda, bool constCRLB) : base(xy, crlb, spotFramenum, numspots, cuda, constCRLB),
 		framesPerBin(framesPerBin)
 	{}
 
 	virtual std::vector<Pt> InitializeDriftState(const Pt* driftPerFrame)
 	{
-		int nbins = (NumFrames() + framesPerBin - 1) / framesPerBin;
+		int nbins = (base::NumFrames() + framesPerBin - 1) / framesPerBin;
 		std::vector<Pt> state(nbins);
 
 		// set drift to mean of every bin
@@ -433,7 +433,7 @@ public:
 			int start = i * framesPerBin - framesPerBin / 2;
 			int end = start + framesPerBin;
 			if (start < 0) start = 0;
-			if (end >= NumFrames()) end = NumFrames() - 1;
+			if (end >= base::NumFrames()) end = base::NumFrames() - 1;
 			Pt sum;
 			for (int j = start; j <= end; j++) {
 				sum += driftPerFrame[j];
@@ -447,7 +447,7 @@ public:
 	virtual std::vector<Pt> ComputeDriftPerFrame()
 	{
 		// Evaluate the spline
-		std::vector<Pt> drift(NumFrames());
+		std::vector<Pt> drift(base::NumFrames());
 
 		for (int f = 0; f < drift.size(); f++) {
 
@@ -459,8 +459,8 @@ public:
 
 			Pt val;
 			for (int j = 0; j < 4; j++) {
-				int knot = std::min(std::max(0, bin + j - 1), (int)driftState.size() - 1);
-				val += driftState[knot] * w[j];
+				int knot = std::min(std::max(0, bin + j - 1), (int)base::driftState.size() - 1);
+				val += base::driftState[knot] * w[j];
 			}
 			drift[f] = val;
 		}
@@ -469,15 +469,16 @@ public:
 
 	virtual std::pair<double, std::vector<Pt>> ComputeDriftDelta(double lastScore)
 	{
-		double score = UpdateDeltas(lastScore);
+		double score = base::UpdateDeltas(lastScore);
 
-		if (iteration > 0 && lastScore >= score)
+		if (base::iteration > 0 && lastScore >= score)
 			return { score,{} };
 
-		std::vector< Vector< Pt, 4> > frameDeltas(NumFrames());
+		std::vector< Vector< Pt, 4> > frameDeltas(base::NumFrames());
 		int framesPerBin = this->framesPerBin;
 
-		palala_for(NumFrames(), cuda, PALALA(int f, const int* sifCount, const int* sifList, const int* sifStart, 
+		/*
+		palala_for(base::NumFrames(), base::cuda, PALALA(int f, const int* sifCount, const int* sifList, const int* sifStart,
 			const Pt * deltaDriftPerSpot, Vector<Pt, 4> * frameDeltas)
 		{
 			// compute derivative for drift sx_f, sy_f
@@ -498,12 +499,13 @@ public:
 				frameDelta[i] = xy * w[i];
 
 			frameDeltas[f] = frameDelta;
-		}, const_vector(sifCount), const_vector(sifList), const_vector(sifStart), const_vector(deltaDriftPerSpot), 
+		}, const_vector(base::sifCount), const_vector(base::sifList), const_vector(base::sifStart), const_vector(base::deltaDriftPerSpot),
 			frameDeltas);
+		*/
 
-		std::vector<Pt> stateDelta(driftState.size());
+		std::vector<Pt> stateDelta(base::driftState.size());
 
-		for (int i = 0; i < NumFrames(); i++) {
+		for (int i = 0; i < base::NumFrames(); i++) {
 			int bin = i / framesPerBin;
 			for (int j = 0; j < 4; j++) {
 				int knot = std::min(std::max(0, bin + j - 1), (int)stateDelta.size() - 1);
@@ -542,7 +544,7 @@ int MinEntropyDriftEstimate_(const float* coords_, const float* crlb_, const int
 		estimator = new SplineBasedMinEntropyDriftEstimator<D>(coords, crlb, spotFramenum, numspots, framesPerBin, cuda, flags & DME_CONSTCRLB);
 	}
 
-	int its = estimator->Run(gradientStep, maxdrift, scores, maxiterations, (const Vec*)drift_, maxneighbors, progcb);
+	int its = estimator->Run(gradientStep, maxdrift, scores, maxiterations, (const V*)drift_, maxneighbors, progcb);
 
 	auto drift = estimator->ComputeDriftPerFrame();
 	std::copy(drift.begin(), drift.end(), (V*)drift_);
