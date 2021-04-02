@@ -11,15 +11,6 @@ from .fit_gauss_2D import fit_sigma_2d
 from .native_api import NativeAPI
 
 
-# Spots is an array with rows: [ x,y, sigmaX, sigmaY, intensity ]
-def Draw(self, img, spots, addSigma=0):
-    spots = np.ascontiguousarray(spots, dtype=np.float32)
-    nspots = spots.shape[0]
-    assert spots.shape[1] == 5
-    img = np.ascontiguousarray(img, dtype=np.float64)
-    self._Gauss2D_Draw(img, img.shape[1], img.shape[0], spots, nspots, addSigma)
-    return img
-
 
 def crosscorrelation(A, B):
     A_fft = np.fft.fft2(A)
