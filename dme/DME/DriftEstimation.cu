@@ -152,7 +152,7 @@ public:
 			if (iteration == 0 || lastscore < totalscore) { // improvement
 				prevDriftState = driftState;
 				gradientStep *= 1.2f;
-				std::string info = SPrintf("%d. Accepting step. Score: %f. Stepsize: %e [cuda=%d]", iteration, totalscore, gradientStep, cuda);
+				std::string info = SPrintf("%d. Accepting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, totalscore, gradientStep, cuda, D);
 				if (progcb) {
 					if (!progcb(iteration, info.c_str()))
 						break;
@@ -166,7 +166,7 @@ public:
 				if (gradientStep < 1e-16f || rejectCount == 10)
 					break;
 
-				std::string info = SPrintf("%d. Rejecting step. Score: %f. Stepsize: %e [cuda=%d]", iteration, totalscore, gradientStep, cuda);
+				std::string info = SPrintf("%d. Rejecting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, totalscore, gradientStep, cuda, D);
 				if (progcb) {
 					if (!progcb(iteration, info.c_str()))
 						break;
@@ -477,7 +477,6 @@ public:
 		std::vector< Vector< Pt, 4> > frameDeltas(base::NumFrames());
 		int framesPerBin = this->framesPerBin;
 
-		/*
 		palala_for(base::NumFrames(), base::cuda, PALALA(int f, const int* sifCount, const int* sifList, const int* sifStart,
 			const Pt * deltaDriftPerSpot, Vector<Pt, 4> * frameDeltas)
 		{
@@ -501,7 +500,6 @@ public:
 			frameDeltas[f] = frameDelta;
 		}, const_vector(base::sifCount), const_vector(base::sifList), const_vector(base::sifStart), const_vector(base::deltaDriftPerSpot),
 			frameDeltas);
-		*/
 
 		std::vector<Pt> stateDelta(base::driftState.size());
 

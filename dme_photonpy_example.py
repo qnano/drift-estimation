@@ -1,4 +1,7 @@
 """ 
+DME example using the photonpy library, which currently needs CUDA installed.
+If you don't have a cuda supporting card, try the dme_example.py
+
 Example that uses the photonpy library to
 - simulate an SMLM acquisition and run localization on it
 - perform drift estimation using the minimum entropy method

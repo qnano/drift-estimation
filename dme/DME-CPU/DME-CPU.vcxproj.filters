@@ -50,5 +50,8 @@
     <ClCompile Include="..\DME\DriftEstimation.cu">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\DME\Rendering.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
