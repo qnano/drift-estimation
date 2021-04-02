@@ -21,9 +21,6 @@
     <ClInclude Include="..\DME\DLLMacros.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\DME\DriftEstimation.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\DME\KahanSum.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -47,11 +44,11 @@
     <ClCompile Include="..\DME\StringUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\DME\DriftEstimation.cu">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\DME\Rendering.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DME\DriftEstimation.cu">
+      <Filter>Header Files</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

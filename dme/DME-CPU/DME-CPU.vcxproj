@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClInclude Include="..\DME\ContainerUtils.h" />
     <ClInclude Include="..\DME\DLLMacros.h" />
-    <ClInclude Include="..\DME\DriftEstimation.h" />
     <ClInclude Include="..\DME\KahanSum.h" />
     <ClInclude Include="..\DME\KDTree.h" />
     <ClInclude Include="..\DME\palala.h" />

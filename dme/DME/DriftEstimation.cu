@@ -1,10 +1,14 @@
 // Drift estimation using entropy minimization (DME)
 // 
+// Note that this code also compiles without CUDA even though the extension is .cu. 
+// CUDA support is implemented through a bunch of template tricks in palala.h
+// 
 // photonpy - Single molecule localization microscopy library
 // © Jelmer Cnossen 2018-2021
+
+// Note
 #include "palala.h"
 
-#include "DriftEstimation.h"
 #include "ContainerUtils.h"
 #include "ThreadUtils.h"
 
