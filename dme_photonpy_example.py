@@ -9,7 +9,8 @@ Example that uses the photonpy library to
 
 See https://github.com/qnano/photonpy/blob/master/cpp/SMLMLib/DriftEstimation.cu for the algorithm implementation.
 
-photonpy can be installed following https://github.com/qnano/photonpy/blob/master/README.md
+photonpy can be installed using "pip install photonpy=1.0.39"
+or following https://github.com/qnano/photonpy/blob/master/README.md
 """
 from photonpy import Context,Dataset,GaussianPSFMethods
 import numpy as np

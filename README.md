@@ -39,9 +39,9 @@ python dme_example.py
 To run dme_photonpy_example.py
 ------------------------------
 
-1. Install CUDA toolkit 10.2 update 2.
+1. Install CUDA toolkit 11.2
 2. Install photonpy library. Only windows 64-bit at the moment:
 
 ```
-pip install photonpy
+pip install photonpy=1.0.39
 ```
