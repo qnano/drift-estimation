@@ -8,18 +8,40 @@ from .native_api import NativeAPI
 from .rcc import rcc
         
 def dme_estimate(positions, framenum, crlb, framesperbin, imgshape, 
-          maxdrift=3, 
-          debugMode=False,
-          coarseFramesPerBin=None,coarseSigma=None, perSpotCRLB=False,
+          coarseFramesPerBin=None,
+          coarseSigma=None, 
+          perSpotCRLB=False,
           useCuda=False,
           display=True, # make a plot
           pixelsize=None,
           maxspots=None, 
-          initializeWithRCC=True, initialEstimate=None, 
-          rccZoom=2,estimatePrecision=True,
-          maxNeighbors=10000):
+          initializeWithRCC=True, 
+          initialEstimate=None, 
+          rccZoom=2,
+          estimatePrecision=True,
+          maxNeighbors=1000):
     """
-    Maximize localization correlation
+    Estimate drift using minimum entropy method. Parameters:
+
+    Required parameters: 
+        
+    positions: a N by K sized numpy array with all the positions, with N being the number of localizations and K the number of dimensions
+    framenum: a integer numpy array of frame numbers corresponding to each localization in positions
+    crlb: an N by K sized numpy array with uncertainty of positions (cramer rao lower bound from the localization code)
+    framesperbin: Number of frames per spline point. Either 1 to disable spline interpolation, or >= 4 to enable cubic splines.
+    imgshape: Field of view size [height, width]. Only used for computing the initial 2D estimate using RCC 
+        
+    Optional parameters:
+
+    estimatePrecision: Split the dataset in two, and estimate drift on both. The difference gives an indication of estimation precision.
+    display: Generate a matplotlib plot with results
+    coarseFramesPerBin / coarseSigma: If not None, do a coarse initialization to prevent a local minimum. 
+            coarseSigma sets an alternative 'CRLB' to smooth the optimziation landscape (typically make it 4x larger).
+    pixelsize: Size of pixels in nm. If display=True, it will convert the units in the plot to nm
+    maxspots: If not None, it will select the brightess spots to use and ignore the rest. Useful for large datasets > 1M spots
+    initialEstimate: Initial drift estimate, replaces RCC initialization
+    maxNeighbors: Limit the number of neighbors a single spot can have. 
+    
     """
     ndims = positions.shape[1]
     numframes = np.max(framenum)+1
@@ -71,6 +93,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
             crlb_set1 = crlb
             crlb_set2 = crlb
                             
+        maxdrift=0 # ignored at the moment
         if coarseFramesPerBin is not None:
             print(f"Computing initial coarse drift estimate... ({coarseFramesPerBin} frames/bin)",flush=True)
             with tqdm.tqdm() as pbar:
