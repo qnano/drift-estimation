@@ -212,7 +212,7 @@ public:
 		Pt OneOverSigmaSq = 1.0f / (sigma*sigma);
 
 		// compute normalization terms
-		palala_for((int)positions.size(), cuda, PALALA(int i,
+		palala_for((int)positions.size(), cuda, PLL_FN(int i,
 			float* norm, const int* nbIndices, const int* nbStart, const int* nbCount, const Pt * undrifted) {
 
 			float sum = 1.0f; // one for i=j
@@ -243,7 +243,7 @@ public:
 			return score;
 
 		// for each spot go through all its neighbors
-		palala_for((int)positions.size(), cuda, PALALA(int i,
+		palala_for((int)positions.size(), cuda, PLL_FN(int i,
 			Pt * deltaDrift, const float* norm, const int* nbIndices, const int* nbStart, const int* nbCount, const Pt * undrifted, const int* framenum) {
 
 			Pt delta = {};
@@ -275,7 +275,7 @@ public:
 		std::vector<float> norm(positions.size());
 
 		// compute normalization terms
-		palala_for((int)positions.size(), cuda, PALALA(int i,
+		palala_for((int)positions.size(), cuda, PLL_FN(int i,
 			float* norm, const int* nbIndices, const int* nbStart, const int* nbCount, const Pt * undrifted, const Pt * crlb) {
 
 			float sum = 1.0f; // one for i=j
@@ -302,7 +302,7 @@ public:
 			return score;
 
 		// for each spot go through all its neighbors
-		palala_for((int)positions.size(), cuda, PALALA(int i,
+		palala_for((int)positions.size(), cuda, PLL_FN(int i,
 			Pt * deltaDrift, const float* norm, const int* nbIndices, const int* nbStart, const int* nbCount, const Pt * undrifted, const Pt * crlb, const int* framenum) {
 
 			Pt delta = {};
@@ -481,7 +481,7 @@ public:
 		std::vector< Vector< Pt, 4> > frameDeltas(base::NumFrames());
 		int framesPerBin = this->framesPerBin;
 
-		palala_for(base::NumFrames(), base::cuda, PALALA(int f, const int* sifCount, const int* sifList, const int* sifStart,
+		palala_for(base::NumFrames(), base::cuda, PLL_FN(int f, const int* sifCount, const int* sifList, const int* sifStart,
 			const Pt * deltaDriftPerSpot, Vector<Pt, 4> * frameDeltas)
 		{
 			// compute derivative for drift sx_f, sy_f

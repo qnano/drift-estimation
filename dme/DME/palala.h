@@ -8,6 +8,7 @@ To use, CUDA extended lambda's need to be enabled (lambda functions that can be 
 This is done by adding "--expt-extended-lambda" to the NVCC command line.
 
 TODO:
+- rewrite it because its a big mess
 - Conditional cudaDeviceSynchronize(). Only if there is memory that needs to be copied back to host
 - Allow specifying cuda streams, async memory copyInProgress
 
@@ -198,7 +199,7 @@ struct const_host_param_buf {
 	const_host_param_buf(const_host_param_buf&& o) : h_data(o.h_data), size(o.size) {
 		o.h_data = 0;
 		o.size = 0;
-}
+	}
 
 	const_host_param_buf(const std::vector<T>& v) : h_data(&v[0]), size(v.size()) {}
 	const_host_param_buf(const const_param_array<T>& a) : h_data(a.data), size(a.size) {}
@@ -211,39 +212,39 @@ struct const_host_param_buf {
 
 
 
-	template<typename T>
-	typename param_array<T> _make_array(T* ptr, size_t size, const char *dbgname) { 
-		auto r = param_array<T>(ptr, size); 
-		r.setDebugName(dbgname);
-		return r;
-	}
+template<typename T>
+typename param_array<T> _make_array(T* ptr, size_t size, const char *dbgname) { 
+	auto r = param_array<T>(ptr, size); 
+	r.setDebugName(dbgname);
+	return r;
+}
 
-	template<typename T>
-	typename const_param_array<T> _make_array(const T* ptr, size_t size, const char *dbgname) { 
-		auto r = const_param_array<T>(ptr, size);
-		r.setDebugName(dbgname);
-		return r;
-	}
+template<typename T>
+typename const_param_array<T> _make_array(const T* ptr, size_t size, const char *dbgname) { 
+	auto r = const_param_array<T>(ptr, size);
+	r.setDebugName(dbgname);
+	return r;
+}
 
-	template<typename T>
-	typename const_param_array<T> _const_array(const T* ptr, size_t size, const char *dbgname) { 
-		auto r = const_param_array<T>(ptr, size); 
-		r.setDebugName(dbgname);
-		return r;
-	}
+template<typename T>
+typename const_param_array<T> _const_array(const T* ptr, size_t size, const char *dbgname) { 
+	auto r = const_param_array<T>(ptr, size); 
+	r.setDebugName(dbgname);
+	return r;
+}
 
-	template<typename T>
-	typename param_array<T> _out_array(T* ptr, size_t size, const char *dbgname) {
-		auto r = param_array<T>(ptr, size); 
-		r.isOutputArray = true;
-		r.setDebugName(dbgname);
-		return r;
-	}
+template<typename T>
+typename param_array<T> _out_array(T* ptr, size_t size, const char *dbgname) {
+	auto r = param_array<T>(ptr, size); 
+	r.isOutputArray = true;
+	r.setDebugName(dbgname);
+	return r;
+}
 
-	#define make_array(_Ptr, _Size) _make_array(_Ptr, _Size, #_Ptr)
-	#define const_array(_Ptr, _Size) _const_array(_Ptr, _Size, #_Ptr)
-	#define out_array(_Ptr, _Size) _out_array(_Ptr, _Size, #_Ptr)
-	#define const_vector(_Vec) _const_array((_Vec).data(), (_Vec).size(), #_Vec)
+#define make_array(_Ptr, _Size) _make_array(_Ptr, _Size, #_Ptr)
+#define const_array(_Ptr, _Size) _const_array(_Ptr, _Size, #_Ptr)
+#define out_array(_Ptr, _Size) _out_array(_Ptr, _Size, #_Ptr)
+#define const_vector(_Vec) _const_array((_Vec).data(), (_Vec).size(), #_Vec)
 
 // Default
 template<bool cuda, typename T>
@@ -292,6 +293,7 @@ struct get_param_arg<true, const param_array<T> >
 	typedef const_device_param_buf<T> type;
 };
 
+
 template<typename T>
 struct pass_to_kernel<device_param_buf<T>> {
 	typedef param_array<T> type;
@@ -300,7 +302,7 @@ struct pass_to_kernel<device_param_buf<T>> {
 template<typename T>
 struct pass_to_kernel<const_device_param_buf<T>> {
 	typedef const_param_array<T> type;
-	static const_param_array<T> pass(const_device_param_buf<T>& v) { return v.kernelParam(); }
+	static const_param_array<T> pass(const const_device_param_buf<T>& v) { return v.kernelParam(); }
 };
 #endif
 template<typename T>
@@ -336,16 +338,20 @@ struct pass_to_kernel<const_host_param_buf<T>> {
 	static const_param_array<T> pass(const const_host_param_buf<T>& v) { return v.asParamArray(); }
 };
 template<typename T>
-typename pass_to_kernel<T>::type pala_pass_to_kernel(T& v) {
+typename pass_to_kernel<T>::type _pass_to_kernel(T& v) {
 	return pass_to_kernel<T>::pass(v);
 }
 template<typename T>
-typename pass_to_kernel<const T>::type pala_pass_to_kernel(const T& v) {
+typename pass_to_kernel<const T>::type _pass_to_kernel(const T& v) {
 	return pass_to_kernel<const T>::pass(v);
 }
 
 template<typename T>
 auto convert_arg(T& v) -> typename get_param_arg<false, T>::type {
+	return get_param_arg<false, T>::type(v);
+}
+template<typename T>
+auto convert_arg(T&& v) -> typename get_param_arg<false, T>::type {
 	return get_param_arg<false, T>::type(v);
 }
 
@@ -359,13 +365,13 @@ void call_func(int nx, bool singleThread, Function f, const Tuple& t, std::index
 {
 	if (singleThread) {
 		for (int i = 0; i < nx; i++)
-			f(i, (pala_pass_to_kernel(std::get<I>(t))) ...);
+			f(i, (_pass_to_kernel(std::get<I>(t))) ...);
 	}
 	else {
 		std::vector< std::future<void> > futures(nx);
 
 		for (int i = 0; i < nx; i++)
-			futures[i] = std::async(f, i, (pala_pass_to_kernel(std::get<I>(t))) ...);
+			futures[i] = std::async(f, i, (_pass_to_kernel(std::get<I>(t))) ...);
 
 		for (auto& e : futures)
 			e.get();
@@ -378,14 +384,14 @@ void call_func(int nx, int ny, bool singleThread, Function f, Tuple& t, std::ind
 	if (singleThread) {
 		for (int x = 0; x < nx; x++)
 			for (int y = 0; y < ny; y++)
-				f(x, y, (pala_pass_to_kernel(std::get<I>(t))) ...);
+				f(x, y, (_pass_to_kernel(std::get<I>(t))) ...);
 	}
 	else {
 		std::vector< std::future<void> > futures(nx*ny);
 
 		for (int x = 0; x < nx; x++)
 			for (int y = 0; y < ny; y++) 
-				futures[x*ny+y] = std::async(f, x, y, (pala_pass_to_kernel(std::get<I>(t))) ...);
+				futures[x*ny+y] = std::async(f, x, y, (_pass_to_kernel(std::get<I>(t))) ...);
 
 		for (auto& e : futures)
 			e.get();
@@ -435,7 +441,7 @@ void call_kernel(int n, Function f, Tuple& t, std::index_sequence<I...>)
 {
 	dim3 numThreads(128);
 	dim3 numBlocks((n + numThreads.x - 1) / numThreads.x);
-	Kernel1D << < numBlocks, numThreads >> > (n, f, pala_pass_to_kernel(std::get<I>(t))...);
+	Kernel1D << < numBlocks, numThreads >> > (n, f, _pass_to_kernel(std::get<I>(t))...);
 	ThrowIfCUDAError();
 	cudaDeviceSynchronize();
 }
@@ -451,12 +457,32 @@ void call_kernel(int nx, int ny, Function f, Tuple& t, std::index_sequence<I...>
 }
 
 template<typename T>
+auto cuda_convert_arg(T&& v) -> typename get_param_arg<true, T>::type {
+	//DebugPrintf("cuda_convert_arg(&v) with type v=%s -> converted to %s\n", typeid(T).name(), typeid(get_param_arg<true, T>::type).name());
+	return get_param_arg<true, T>::type(v);
+}
+template<typename T>
 auto cuda_convert_arg(T& v) -> typename get_param_arg<true, T>::type {
+	//DebugPrintf("cuda_convert_arg(&v) with type v=%s -> converted to %s\n", typeid(T).name(), typeid(get_param_arg<true, T>::type).name());
 	return get_param_arg<true, T>::type(v);
 }
 template<typename T>
 auto cuda_convert_arg(const T& v) -> typename get_param_arg<true, const T>::type {
-	return get_param_arg<true, const T&>::type(v);
+	//DebugPrintf("cuda_convert_arg(const &v) with type v=%s -> converted to %s\n", typeid(T).name(), typeid(get_param_arg<true, T>::type).name());
+	return get_param_arg<true, const T>::type(v);
+	//return get_param_arg<true, const T&>::type(v);
+}
+
+
+template<typename Function, typename... Args>
+void palala_for_cuda(int nx, Function f, Args&&... args) {
+	auto argtuple = std::make_tuple(cuda_convert_arg(std::forward<Args>(args))...);
+	call_kernel(nx, f, argtuple, std::index_sequence_for<Args...>{});
+}
+template<typename Function, typename... Args>
+void palala_for_cuda(int nx, int ny, Function f, Args&&... args) {
+	auto argtuple = std::make_tuple(cuda_convert_arg(std::forward<Args>(args))...);
+	call_kernel(nx, ny, f, argtuple, std::index_sequence_for<Args...>{});
 }
 
 #endif
@@ -467,7 +493,7 @@ void palala_for(int nx, bool useCuda, Function f, Args&&... args)
 {
 #ifdef PALALA_CUDA
 	if (useCuda)
-		palala_for_cpu(nx, f, std::forward<Args>(args)...);
+		palala_for_cuda(nx, f, std::forward<Args>(args)...);
 	else {
 #ifdef _DEBUG
 		singlethread_for(nx, f, std::forward<Args>(args)...);
@@ -476,6 +502,8 @@ void palala_for(int nx, bool useCuda, Function f, Args&&... args)
 #endif
 	}
 #else
+	if (!useCuda)
+		throw std::runtime_error("Trying to use CUDA in a non-CUDA build");
 	palala_for_cpu(nx, f, std::forward<Args>(args)...);
 #endif
 }
@@ -486,7 +514,7 @@ void palala_for(int nx, int ny, bool useCuda, Function f, Args&&... args)
 {
 #ifdef PALALA_CUDA
 	if (useCuda)
-		palala_for_cpu(nx, ny, f, std::forward<Args>(args)...);
+		palala_for_cuda(nx, ny, f, std::forward<Args>(args)...);
 	else {
 #ifdef _DEBUG
 		singlethread_for(nx, ny, f, std::forward<Args>(args)...);
@@ -495,14 +523,16 @@ void palala_for(int nx, int ny, bool useCuda, Function f, Args&&... args)
 #endif
 	}
 #else
+	if (!useCuda)
+		throw std::runtime_error("Trying to use CUDA in a non-CUDA build");
 	palala_for_cpu(nx, f, std::forward<Args>(args)...);
 #endif
 }
 
 #ifdef PALALA_CUDA
-#define PALALA [=] __device__ __host__
+#define PLL_FN [=] __device__ __host__
 #else
-#define PALALA [=]
+#define PLL_FN [=]
 #endif
 
 #endif

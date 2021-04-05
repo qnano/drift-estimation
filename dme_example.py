@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from dme.dme import dme_estimate
 
 # Need to have CUDA >= 10.1 update 2 installed
-use_cuda=False
+use_cuda=True
 
 
 # Simulate an SMLM dataset in 3D with blinking molecules

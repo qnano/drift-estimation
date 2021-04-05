@@ -17,7 +17,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
           maxspots=None, 
           initializeWithRCC=True, initialEstimate=None, 
           rccZoom=2,estimatePrecision=True,
-          maxNeighbors=1000):
+          maxNeighbors=10000):
     """
     Maximize localization correlation
     """
@@ -26,7 +26,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
 
     initial_drift = np.zeros((numframes,ndims))
     
-    with NativeAPI(useCuda) as dll:
+    with NativeAPI(useCuda, debugMode=False) as dll:
 
         if initialEstimate is not None:
             initial_drift = np.ascontiguousarray(initialEstimate,dtype=np.float32)
@@ -111,13 +111,10 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
             drift_set1 -= np.mean(drift_set1,0)
             drift_set2 -= np.mean(drift_set2,0)
 
-            # both of these use half the data (so assuming precision scales with sqrt(N)), 2x variance
-            # subtracting two 2x variance signals gives a 4x variance estimation of precision
-            # this seems to be very accurate if framesperbin is 1, a lot less if higher
             L = min(len(drift_set1),len(drift_set2))
             diff = drift_set1[:L] - drift_set2[:L]
-            est_precision = np.std(diff,0)/2
-            print(f"\nEstimated precision: {est_precision}",flush=True)
+            rmsd = np.sqrt( (diff**2).mean(0) )
+            print(f"\nRMSD of drift traces on split dataset: {rmsd}",flush=True)
 
         if display:
             L=len(drift)
@@ -139,13 +136,13 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
             
             if estimatePrecision:
                 if pixelsize is not None:
-                    p=est_precision
+                    p=rmsd
                     scale = [pixelsize, pixelsize, 1000]
                     info = ';'.join([ f'{axnames[i]}: {p[i]*scale[i]:.1f} nm ({p[i]:.3f} {axunits[i]})' for i in range(ndims)])
                     
-                    plt.suptitle(f'Drift trace. Approx. precision of drift estimate: {info}')
+                    plt.suptitle(f'Drift trace. RMSD: {info}')
                 else:
-                    plt.suptitle(f'Drift trace. Est. Precision: X/Y={est_precision[1]:.3f}/{est_precision[1]:.3f} pixels')
+                    plt.suptitle(f'Drift trace. RMSD: X/Y={rmsd[1]:.3f}/{rmsd[1]:.3f} pixels')
                                 
         return drift
 
