@@ -8,7 +8,7 @@ To use, CUDA extended lambda's need to be enabled (lambda functions that can be 
 This is done by adding "--expt-extended-lambda" to the NVCC command line.
 
 TODO:
-- rewrite it because its a big mess
+- clean up
 - Conditional cudaDeviceSynchronize(). Only if there is memory that needs to be copied back to host
 - Allow specifying cuda streams, async memory copyInProgress
 
@@ -451,7 +451,7 @@ void call_kernel(int nx, int ny, Function f, Tuple& t, std::index_sequence<I...>
 {
 	dim3 numThreads(16, 16);
 	dim3 numBlocks((nx + numThreads.x - 1) / numThreads.x, (ny + numThreads.y - 1) / numThreads.y);
-	Kernel2D << < numBlocks, numThreads >> > (nx, ny, f, pala_pass_to_kernel(std::get<I>(t))...);
+	Kernel2D << < numBlocks, numThreads >> > (nx, ny, f, _pass_to_kernel(std::get<I>(t))...);
 	ThrowIfCUDAError();
 	cudaDeviceSynchronize();
 }
