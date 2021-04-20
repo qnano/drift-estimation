@@ -89,3 +89,4 @@ for i in range(3):
     ax[i].set_ylabel(f'Drift [{unit}]')
 ax[0].legend()
 plt.tight_layout()
+plt.show()

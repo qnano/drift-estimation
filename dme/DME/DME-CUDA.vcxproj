@@ -61,11 +61,11 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>../x64</OutDir>
-    <TargetName>dme-cuda-debug</TargetName>
+    <OutDir>../x64/Debug</OutDir>
+    <TargetName>dme-cuda</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>../x64</OutDir>
+    <OutDir>../x64/Release</OutDir>
     <TargetName>dme-cuda</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
