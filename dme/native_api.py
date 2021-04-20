@@ -28,7 +28,9 @@ class NativeAPI:
             dllpath = "dme-cpu"
             
         if debugMode:
-            dllpath += "-debug"
+            dllpath = "Debug/" + dllpath
+        else:
+            dllpath = "Release/" + dllpath
             
         dllpath = f"/x64/{dllpath}.dll"
         abs_dllpath = os.path.abspath(thispath + dllpath)

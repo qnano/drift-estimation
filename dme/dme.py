@@ -5,7 +5,7 @@ import tqdm
 import os
 from .native_api import NativeAPI
 
-from .rcc import rcc
+from .rcc import rcc, rcc3D
         
 def dme_estimate(positions, framenum, crlb, framesperbin, imgshape, 
           coarseFramesPerBin=None,
@@ -19,7 +19,8 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
           initialEstimate=None, 
           rccZoom=2,
           estimatePrecision=True,
-          maxNeighbors=1000):
+          maxNeighbors=1000,
+          useDebugLibrary=False):
     """
     Estimate drift using minimum entropy method. Parameters:
 
@@ -42,13 +43,20 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
     initialEstimate: Initial drift estimate, replaces RCC initialization
     maxNeighbors: Limit the number of neighbors a single spot can have. 
     
+    Return value:
+        
+    If estimatePrecision is True:
+        The estimated drift of full dataset, a tuple with drifts of split dataset
+    Else
+        The estimated drift as numpy array
+    
     """
     ndims = positions.shape[1]
     numframes = np.max(framenum)+1
 
     initial_drift = np.zeros((numframes,ndims))
     
-    with NativeAPI(useCuda, debugMode=False) as dll:
+    with NativeAPI(useCuda, debugMode=useDebugLibrary) as dll:
 
         if initialEstimate is not None:
             initial_drift = np.ascontiguousarray(initialEstimate,dtype=np.float32)
@@ -58,12 +66,15 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
             if type(initializeWithRCC) == bool:
                 initializeWithRCC = 10
     
-            xyI = np.ones((len(positions),3)) 
-            xyI[:,:2] = positions[:,:2]
-            initial_drift[:,:2],_,imgs = rcc(xyI, framenum, initializeWithRCC, 
-                                             np.max(imgshape), dll, zoom=rccZoom)
-            del imgs
-        
+            posI = np.ones((len(positions),positions.shape[1]+1)) 
+            posI[:,:-1] = positions
+    
+            if positions.shape[1] == 3:
+                initial_drift = rcc3D(posI, framenum, initializeWithRCC, dll=dll, zoom=rccZoom)
+            else:
+                initial_drift = rcc(posI, framenum ,initializeWithRCC, dll=dll, zoom=rccZoom)
+            
+    
             
         if maxspots is not None and maxspots < len(positions):
             print(f"Drift correction: Limiting spot count to {maxspots}/{len(positions)} spots.")
@@ -79,7 +90,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
         numIterations = 10000
         step = 0.000001
 
-        splitAxis = np.argmax( np.var(positions,0) )
+        splitAxis = np.argmax( np.var(positions[:,:2],0) ) # only in X or Y
         splitValue = np.median(positions[:,splitAxis])
         
         set1 = positions[:,splitAxis] > splitValue
@@ -166,6 +177,9 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
                     plt.suptitle(f'Drift trace. RMSD: {info}')
                 else:
                     plt.suptitle(f'Drift trace. RMSD: X/Y={rmsd[1]:.3f}/{rmsd[1]:.3f} pixels')
+
+        if estimatePrecision:
+            return drift, (drift_set1, drift_set2)
                                 
         return drift
 

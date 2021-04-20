@@ -7,9 +7,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from dme.dme import dme_estimate
+from dme.rcc import rcc3D
+from dme.native_api import NativeAPI
 
-# Need to have CUDA >= 10.1 update 2 installed
-use_cuda=True
+# Need to have CUDA installed
+use_cuda=False
 
 
 # Simulate an SMLM dataset in 3D with blinking molecules
@@ -59,23 +61,28 @@ localizations, framenum = smlm_simulation(drift_trace, fov_width, loc_error,
 print(f"Total localizations: {len(localizations)}")
 
 crlb = np.ones(localizations.shape) * np.array(loc_error)[None]
+    
 
-estimated_drift = dme_estimate(localizations, framenum, 
+estimated_drift,_ = dme_estimate(localizations, framenum, 
              crlb, 
              framesperbin = 1,  # note that small frames per bin use many more iterations
              imgshape=[fov_width, fov_width], 
              coarseFramesPerBin=200,
              coarseSigma=[0.2,0.2,0.2],  # run a coarse drift correction with large Z sigma
-             useCuda=use_cuda, 
-             maxdrift=5)
+             useCuda=use_cuda,
+             useDebugLibrary=False)
+
+estimated_drift_rcc = rcc3D(localizations, framenum, timebins=10, zoom=1)
+
 
 rmsd = np.sqrt(np.mean((estimated_drift-drift_trace)**2, 0))
-print(f"RMSD of drift estimation: {rmsd}")
+print(f"RMSD of drift estimate compared to true drift: {rmsd}")
 
 fig,ax=plt.subplots(3, figsize=(7,6))
 for i in range(3):
     ax[i].plot(drift_trace[:,i],label='True drift')
-    ax[i].plot(estimated_drift[:,i]+0.2,label='Estimated drift')
+    ax[i].plot(estimated_drift[:,i]+0.2,label='Estimated drift (DME)')
+    ax[i].plot(estimated_drift_rcc[:,i]-0.2,label='Estimated drift (RCC)')
     ax[i].set_title(['x', 'y', 'z'][i])
 
     unit = ['px', 'px', 'um'][i]

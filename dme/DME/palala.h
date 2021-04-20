@@ -502,7 +502,7 @@ void palala_for(int nx, bool useCuda, Function f, Args&&... args)
 #endif
 	}
 #else
-	if (!useCuda)
+	if (useCuda)
 		throw std::runtime_error("Trying to use CUDA in a non-CUDA build");
 	palala_for_cpu(nx, f, std::forward<Args>(args)...);
 #endif
@@ -523,7 +523,7 @@ void palala_for(int nx, int ny, bool useCuda, Function f, Args&&... args)
 #endif
 	}
 #else
-	if (!useCuda)
+	if (useCuda)
 		throw std::runtime_error("Trying to use CUDA in a non-CUDA build");
 	palala_for_cpu(nx, f, std::forward<Args>(args)...);
 #endif

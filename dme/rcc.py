@@ -66,33 +66,34 @@ def findshift_pairs(images, pairs):
     
     return shift
 
-def rcc(xyI, framenum, timebins, rendersize, dll: NativeAPI, zoom=1, 
+def rcc(xy, framenum, timebins, dll: NativeAPI, zoom=1, 
         sigma=1, maxpairs=1000):
     
+    rendersize = int(np.max(xy))
     area = np.array([rendersize,rendersize])
     nframes = np.max(framenum)+1
     framesperbin = nframes/timebins
     
     imgshape = area*zoom
     images = np.zeros((timebins, *imgshape))
-                
+
     for k in range(timebins):
         img = np.zeros(imgshape,dtype=np.float32)
         
         indices = np.nonzero((0.5 + framenum/framesperbin).astype(int)==k)[0]
 
         spots = np.zeros((len(indices), 5), dtype=np.float32)
-        spots[:, 0] = (xyI[indices,0] * zoom) % imgshape[1]
-        spots[:, 1] = (xyI[indices,1] * zoom) % imgshape[0]
+        spots[:, 0] = xy[indices,0] * zoom
+        spots[:, 1] = xy[indices,1] * zoom
         spots[:, 2] = sigma
         spots[:, 3] = sigma
-        spots[:, 4] = xyI[indices,2]
+        spots[:, 4] = 1
         
         if len(spots) == 0:
             raise ValueError(f'no spots in bin {k}')
 
-        images[k] = dll.DrawGaussians(img, spots)
-
+        images[k] = dll.DrawGaussians(img, spots)       
+    
     #print(f"RCC pairs: {timebins*(timebins-1)//2}. Bins={timebins}")
     pairs = np.array(np.triu_indices(timebins,1)).T
     if len(pairs)>maxpairs:
@@ -129,4 +130,29 @@ def rcc(xyI, framenum, timebins, rendersize, dll: NativeAPI, zoom=1,
         shift_interp = shift
             
     return shift_interp, shift_estim, images
-        
+
+
+def rcc3D(xyz, framenum, timebins, zoom, dll:NativeAPI=None, sigma=1):
+
+    def run(dll):
+        print("Computing XY drift")
+        drift_xy = rcc(xyz[:,:2], framenum, timebins, zoom=zoom,sigma=sigma, dll=dll)[0]
+    
+        sheared = xyz[:,:2]*1
+        sheared[:,:2] -= drift_xy[framenum]
+        sheared[:,1] += xyz[:,2]
+        print("Computing Z drift")
+        drift_sheared = rcc(sheared, framenum, timebins, dll=dll, zoom=zoom, sigma=sigma)[0]
+    
+        drift_xyz = np.zeros((len(drift_xy),3))
+        drift_xyz[:,:2] = drift_xy
+        drift_xyz[:,2] = drift_sheared[:,1]
+        drift_xyz -= drift_xyz.mean(0)
+        return drift_xyz
+    
+    if dll is None:
+        with NativeAPI(False) as dll:
+            return run(dll)
+    else:
+        return run(dll)
+    

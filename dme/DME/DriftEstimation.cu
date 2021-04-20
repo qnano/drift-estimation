@@ -557,9 +557,15 @@ CDLL_EXPORT int MinEntropyDriftEstimate(const float* coords_, const float* crlb_
 	int maxiterations, float* drift, int framesPerBin, float gradientStep, float maxdrift, float* scores, int flags, int maxneighbors,
 	int (*progcb)(int iteration, const char* info))
 {
-	if (flags & DME_3D)
-		return MinEntropyDriftEstimate_<3>(coords_, crlb_, spotFramenum, numspots, maxiterations, drift, framesPerBin, gradientStep, maxdrift, scores, flags, maxneighbors, progcb);
-	else
-		return MinEntropyDriftEstimate_<2>(coords_, crlb_, spotFramenum, numspots, maxiterations, drift, framesPerBin, gradientStep, maxdrift, scores, flags, maxneighbors, progcb);
+	try {
+		if (flags & DME_3D)
+			return MinEntropyDriftEstimate_<3>(coords_, crlb_, spotFramenum, numspots, maxiterations, drift, framesPerBin, gradientStep, maxdrift, scores, flags, maxneighbors, progcb);
+		else
+			return MinEntropyDriftEstimate_<2>(coords_, crlb_, spotFramenum, numspots, maxiterations, drift, framesPerBin, gradientStep, maxdrift, scores, flags, maxneighbors, progcb);
+	}
+	catch (const std::exception& exc) {
+		DebugPrintf("MinEntropyDriftEstimate Exception: %s\n", exc.what());
+		return 0;
+	}
 }
 
