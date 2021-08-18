@@ -15,7 +15,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
           display=True, # make a plot
           pixelsize=None,
           maxspots=None, 
-          initializeWithRCC=True, 
+          initializeWithRCC=10, 
           initialEstimate=None, 
           rccZoom=2,
           estimatePrecision=True,
@@ -34,6 +34,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
         
     Optional parameters:
 
+    initializeWithRCC: If not None, perform RCC with 10 bins to compute an initial estimate. Pass 
     estimatePrecision: Split the dataset in two, and estimate drift on both. The difference gives an indication of estimation precision.
     display: Generate a matplotlib plot with results
     coarseFramesPerBin / coarseSigma: If not None, do a coarse initialization to prevent a local minimum. 
@@ -72,7 +73,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
             if positions.shape[1] == 3:
                 initial_drift = rcc3D(posI, framenum, initializeWithRCC, dll=dll, zoom=rccZoom)
             else:
-                initial_drift = rcc(posI, framenum ,initializeWithRCC, dll=dll, zoom=rccZoom)
+                initial_drift = rcc(posI, framenum ,initializeWithRCC, dll=dll, zoom=rccZoom)[0]
             
     
             
