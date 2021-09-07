@@ -64,5 +64,6 @@ else()  # NO CUDA
 	)
 	target_compile_features(dme PUBLIC cxx_std_11)
 	set_property(TARGET dme PROPERTY POSITION_INDEPENDENT_CODE ON)
+	target_compile_definitions(dme PUBLIC DME_EXPORTS)
 
 endif()

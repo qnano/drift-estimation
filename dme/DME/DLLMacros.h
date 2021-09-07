@@ -5,10 +5,14 @@
 #pragma once
 
 #define DLL_CALLCONV __cdecl
-#ifdef DME_EXPORTS
-	#define DLL_EXPORT __declspec(dllexport) 
+#ifdef WIN32
+	#ifdef DME_EXPORTS
+		#define DLL_EXPORT __declspec(dllexport) 
+	#else
+		#define DLL_EXPORT __declspec(dllimport)
+	#endif
 #else
-	#define DLL_EXPORT __declspec(dllimport)
+	#define DLL_EXPORT 
 #endif
 
 // Support C for matlab imports

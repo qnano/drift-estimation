@@ -4,8 +4,10 @@
 // © Jelmer Cnossen 2018-2021
 #include "StringUtils.h"
 #include <cstdarg>
+#ifdef WIN32
 #include <Windows.h>
-
+#endif
+#include <cstring>
 #include <mutex>
 
 std::mutex printMutex;
@@ -36,7 +38,9 @@ CDLL_EXPORT void DebugPrintf(const char* fmt, ...) {
 		print = !!debugPrintCallback(buf);
 
 	if (print) {
+#ifdef WIN32
 		OutputDebugString(buf);
+#endif
 		fputs(buf, stdout);
 	}
 }
