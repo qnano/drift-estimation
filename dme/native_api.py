@@ -61,7 +61,9 @@ class NativeAPI:
         self.ProgressCallback = ctypes.CFUNCTYPE(
             ctypes.c_int32,  # continue
             ctypes.c_int32,  # iteration
-            ctypes.c_char_p
+            ctypes.c_char_p, # info
+            ctypes.POINTER(ctypes.c_float)
+            #ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # drift: float[frames, dims]
         )
         
         
@@ -156,11 +158,15 @@ class NativeAPI:
         crlb=np.ascontiguousarray(crlb,dtype=np.float32)
                 
         if progcb is None:
-            progcb = lambda i,txt: 1
+            progcb = lambda i,txt,drift: 1
+            
+        def cb(iteration, info, estimate):
+            estimate = ctl.as_array(estimate, (nframes, positions.shape[1]))
+            return progcb(iteration, info, estimate)
 
         nIterations = self._MinEntropyDriftEstimate(
             positions, crlb, framenum, len(positions), iterations, drift, framesPerBin,
-            stepsize, maxdrift, scores, flags, maxneighbors, self.ProgressCallback(progcb))
+            stepsize, maxdrift, scores, flags, maxneighbors, self.ProgressCallback(cb))
 
         return drift, scores[:nIterations]
 

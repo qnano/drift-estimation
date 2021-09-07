@@ -20,7 +20,9 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
           rccZoom=2,
           estimatePrecision=True,
           maxNeighbors=1000,
-          useDebugLibrary=False):
+          coarseMaxIterations=1000,
+          useDebugLibrary=False,
+          traces=None):
     """
     Estimate drift using minimum entropy method. Parameters:
 
@@ -109,19 +111,24 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
         if coarseFramesPerBin is not None:
             print(f"Computing initial coarse drift estimate... ({coarseFramesPerBin} frames/bin)",flush=True)
             with tqdm.tqdm() as pbar:
-                def update_pbar(i,info): 
+                def update_pbar(i,info,drift_est): 
                     pbar.set_description(info.decode("utf-8")); pbar.update(1)
+                    if traces is not None:
+                        traces.append(drift_est.copy())
                     return 1
     
                 initial_drift,score = dll.MinEntropyDriftEstimate(
-                    positions, framenum, initial_drift*1, coarseSigma, numIterations, step, maxdrift, 
+                    positions, framenum, initial_drift*1, coarseSigma, coarseMaxIterations, step, maxdrift, 
                     framesPerBin=coarseFramesPerBin, cuda=useCuda,progcb=update_pbar)
                 
         print(f"\nEstimating drift... ({framesperbin} frames/bin)",flush=True)
         with tqdm.tqdm() as pbar:
-            def update_pbar(i,info): 
+            def update_pbar(i,info,drift_est): 
                 pbar.set_description(info.decode("utf-8"));pbar.update(1)
+                if traces is not None:
+                    traces.append(drift_est.copy())
                 return 1
+            update_pbar(0,''.encode('utf-8'),initial_drift*1)
             drift,score = dll.MinEntropyDriftEstimate(
                 positions, framenum, initial_drift*1, crlb, numIterations, step, maxdrift, framesPerBin=framesperbin, maxneighbors=maxNeighbors,
                 cuda=useCuda, progcb=update_pbar)
@@ -129,7 +136,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
         if estimatePrecision:
             print(f"\nComputing drift estimation precision... (Splitting axis={splitAxis})",flush=True)
             with tqdm.tqdm() as pbar:
-                def update_pbar(i,info): 
+                def update_pbar(i,info,drift_est): 
                     pbar.set_description(info.decode("utf-8"));pbar.update(1)
                     return 1
                 drift_set1,score_set1 = dll.MinEntropyDriftEstimate(

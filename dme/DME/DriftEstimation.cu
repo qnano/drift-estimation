@@ -60,7 +60,8 @@ public:
 
 	// the drift applied when neighborList was generated. If too far from the current drift estimate we need to rebuild it. 
 	NeighborList<float, D> nblist;
-	std::vector<Pt> nbListDrift;
+	std::vector<Pt> nbListDrift, // the drift estimate when the neighbor list was last updated 
+		driftPerFrame;  // current drift estimate
 
 	std::vector<Pt> deltaDriftPerSpot;
 
@@ -104,7 +105,7 @@ public:
 	int NumFrames() { return (int)sifCount.size(); }
 
 
-	void UpdateNeighbors(std::vector<Pt> driftPerFrame)
+	void UpdateNeighbors()
 	{
 		if (!nblist.nbIndices.empty()) {
 			Pt maxdiff;
@@ -124,15 +125,16 @@ public:
 
 	void UpdatePositions()
 	{
-		std::vector<Pt> dpf = ComputeDriftPerFrame();
+		driftPerFrame = ComputeDriftPerFrame();
 
 		for (int i = 0; i < (int)undrifted.size(); i++) {
-			undrifted[i] = positions[i] - dpf[framenum[i]];
+			undrifted[i] = positions[i] - driftPerFrame[framenum[i]];
 		}
-		UpdateNeighbors(dpf);
+		UpdateNeighbors();
 	}
 
-	int Run(float gradientStep, float maxDrift, float* scores, int maxIterations, const Pt* initialDrift, int maxNeighbors, int (*progcb)(int iteration, const char* info))
+	int Run(float gradientStep, float maxDrift, float* scores, int maxIterations, const Pt* initialDrift, int maxNeighbors, 
+		int (*progcb)(int iteration, const char* info, const float* currentEstimate))
 	{
 		driftState = InitializeDriftState(initialDrift);
 		iteration = 0;
@@ -158,7 +160,7 @@ public:
 				gradientStep *= 1.2f;
 				std::string info = SPrintf("%d. Accepting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, totalscore, gradientStep, cuda, D);
 				if (progcb) {
-					if (!progcb(iteration, info.c_str()))
+					if (!progcb(iteration, info.c_str(), (const float*)driftPerFrame.data()))
 						break;
 				}
 
@@ -172,7 +174,7 @@ public:
 
 				std::string info = SPrintf("%d. Rejecting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, totalscore, gradientStep, cuda, D);
 				if (progcb) {
-					if (!progcb(iteration, info.c_str()))
+					if (!progcb(iteration, info.c_str(), (const float*)driftPerFrame.data()))
 						break;
 				}
 
@@ -530,7 +532,7 @@ public:
 template<int D>
 int MinEntropyDriftEstimate_(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
 	int maxiterations, float* drift_, int framesPerBin, float gradientStep, float maxdrift, float* scores, int flags, int maxneighbors,
-	int (*progcb)(int iteration, const char* info))
+	int (*progcb)(int iteration, const char* info, const float* drift))
 {
 	typedef Vector<float, D> V;
 	const V* coords = (const V*)coords_;
@@ -555,7 +557,7 @@ int MinEntropyDriftEstimate_(const float* coords_, const float* crlb_, const int
 
 CDLL_EXPORT int MinEntropyDriftEstimate(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
 	int maxiterations, float* drift, int framesPerBin, float gradientStep, float maxdrift, float* scores, int flags, int maxneighbors,
-	int (*progcb)(int iteration, const char* info))
+	int (*progcb)(int iteration, const char* info, const float *currentDriftEstimate))
 {
 	try {
 		if (flags & DME_3D)
