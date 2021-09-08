@@ -29,7 +29,7 @@
 #define ALLOCA(size) alloca(size)
 #endif
 
-#include "dllmacros.h"
+#include "DLLMacros.h"
 
 DLL_EXPORT std::string SPrintf(const char *fmt, ...);
 CDLL_EXPORT void DebugPrintf(const char*fmt, ...);
