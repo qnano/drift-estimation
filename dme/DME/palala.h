@@ -213,29 +213,24 @@ struct const_host_param_buf {
 
 
 template<typename T>
-typename param_array<T> _make_array(typename T* ptr, size_t size, const char *dbgname) { 
-	auto r = typename param_array<T>(ptr, size); 
+param_array<T> _make_array(T* ptr, size_t size, const char *dbgname) 
+{ 
+	auto r = param_array<T>(ptr, size); 
+	r.setDebugName(dbgname);
+	return r;
+}
+
+
+template<typename T>
+const_param_array<T> _const_array(const T* ptr, size_t size, const char *dbgname) { 
+	auto r = const_param_array<T>(ptr, size); 
 	r.setDebugName(dbgname);
 	return r;
 }
 
 template<typename T>
-typename const_param_array<T> _make_array(typename const T* ptr, size_t size, const char *dbgname) { 
-	auto r = typename const_param_array<T>(ptr, size);
-	r.setDebugName(dbgname);
-	return r;
-}
-
-template<typename T>
-typename const_param_array<T> _const_array(typename const T* ptr, size_t size, const char *dbgname) { 
-	auto r = typename const_param_array<T>(ptr, size); 
-	r.setDebugName(dbgname);
-	return r;
-}
-
-template<typename T>
-typename param_array<T> _out_array(typename T* ptr, size_t size, const char *dbgname) {
-	auto r = typename param_array<T>(ptr, size); 
+param_array<T> _out_array(T* ptr, size_t size, const char *dbgname) {
+	auto r = param_array<T>(ptr, size); 
 	r.isOutputArray = true;
 	r.setDebugName(dbgname);
 	return r;
@@ -348,16 +343,16 @@ typename pass_to_kernel<const T>::type _pass_to_kernel(const T& v) {
 
 template<typename T>
 auto convert_arg(T& v) -> typename get_param_arg<false, T>::type {
-	return get_param_arg<false, T>::type(v);
+	return typename get_param_arg<false, T>::type(v);
 }
 template<typename T>
 auto convert_arg(T&& v) -> typename get_param_arg<false, T>::type {
-	return get_param_arg<false, T>::type(v);
+	return typename get_param_arg<false, T>::type(v);
 }
 
 template<typename T>
 auto convert_arg(const T& v) -> typename get_param_arg<false, const T>::type {
-	return get_param_arg<false, const T>::type(v);
+	return typename get_param_arg<false, const T>::type(v);
 }
 
 template<typename Function, typename Tuple, std::size_t ...I>
@@ -459,18 +454,17 @@ void call_kernel(int nx, int ny, Function f, Tuple& t, std::index_sequence<I...>
 template<typename T>
 auto cuda_convert_arg(T&& v) -> typename get_param_arg<true, T>::type {
 	//DebugPrintf("cuda_convert_arg(&v) with type v=%s -> converted to %s\n", typeid(T).name(), typeid(get_param_arg<true, T>::type).name());
-	return get_param_arg<true, T>::type(v);
+	return typename get_param_arg<true, T>::type(v);
 }
 template<typename T>
 auto cuda_convert_arg(T& v) -> typename get_param_arg<true, T>::type {
 	//DebugPrintf("cuda_convert_arg(&v) with type v=%s -> converted to %s\n", typeid(T).name(), typeid(get_param_arg<true, T>::type).name());
-	return get_param_arg<true, T>::type(v);
+	return typename get_param_arg<true, T>::type(v);
 }
 template<typename T>
 auto cuda_convert_arg(const T& v) -> typename get_param_arg<true, const T>::type {
 	//DebugPrintf("cuda_convert_arg(const &v) with type v=%s -> converted to %s\n", typeid(T).name(), typeid(get_param_arg<true, T>::type).name());
-	return get_param_arg<true, const T>::type(v);
-	//return get_param_arg<true, const T&>::type(v);
+	return typename get_param_arg<true, const T>::type(v);
 }
 
 

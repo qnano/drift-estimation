@@ -19,7 +19,7 @@ if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)  # the latter is a user definable 
    enable_language(CUDA)
    add_compile_definitions(CUDA_ENABLED)
 
-   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --gpu-architecture=sm_50")
+   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --gpu-architecture=sm_50 --expt-extended-lambda")
 else()
    message(WARNING "No CUDA compiler found or disabled by user defined command line variable '-DCUDA_DISABLED=True'.
    You may need to specify its path like \t'export CUDACXX=/usr/local/cuda/bin/nvcc'")
@@ -45,11 +45,11 @@ if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)
    set_target_properties(dme PROPERTIES CUDA_SEPARABLE_COMPILATION ON POSITION_INDEPENDENT_CODE ON)
    set_property(TARGET dme PROPERTY CUDA_ARCHITECTURES 72 75)
    target_compile_options(dme PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:  # seems to be unnecssary but keep the code block for the moment
-                         --expt-relaxed-constexpr
-						 --expt-extended-lambda
+                        --expt-relaxed-constexpr
+			--expt-extended-lambda
                          >)
                         # -rdc=true
-                        # --gpu-architecture=sm_50
+   set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -use_fast_math)                     # --gpu-architecture=sm_50
 
    link_directories(/usr/local/cuda/lib64)
    #include_directories("${CUDA_INCLUDE_DIRS}")
