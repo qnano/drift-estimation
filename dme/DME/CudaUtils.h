@@ -214,8 +214,8 @@ public:
 			d[k++] = *first;
 		}
 	}
-	template<typename T>
-	PinnedArray(const DeviceArray<T>& src) {
+	template<typename TOther>
+	PinnedArray(const DeviceArray<TOther>& src) {
 		d=0; Init(src.size()); src.CopyToHost(d,false);
 	}
 

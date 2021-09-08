@@ -351,7 +351,7 @@ class PerFrameMinEntropyDriftEstimator : public LocalizationDriftEstimator<D>
 {
 public:
 	typedef LocalizationDriftEstimator<D> base; // this is required due to the C++ rules of name lookup and the base class being templated
-	typedef LocalizationDriftEstimator<D>::Pt Pt;
+	typedef typename LocalizationDriftEstimator<D>::Pt Pt;
 	Pt sigma;
 
 	PerFrameMinEntropyDriftEstimator(const Pt* xy, const Pt* crlb, const int* spotFramenum, int numspots, bool cuda, bool useConstCRLB) :
@@ -421,7 +421,7 @@ class SplineBasedMinEntropyDriftEstimator : public LocalizationDriftEstimator<D>
 {
 public:
 	typedef LocalizationDriftEstimator<D> base;
-	typedef LocalizationDriftEstimator<D>::Pt Pt;
+	typedef typename LocalizationDriftEstimator<D>::Pt Pt;
 	int framesPerBin;
 
 	SplineBasedMinEntropyDriftEstimator(const Pt* xy, const Pt* crlb, 

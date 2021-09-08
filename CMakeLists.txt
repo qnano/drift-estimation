@@ -1,14 +1,19 @@
 cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
 #cmake_policy(SET CMP0094 NEW)
 
-project(DriftME LANGUAGES CXX C)
+if (UNIX)
+    # cuda compiler path for linux, as cmake cant find it
+    set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+endif (UNIX)
+
+project(DriftME LANGUAGES CXX CUDA)
 
 include(CheckLanguage)
 check_language(CUDA)
 
 find_package(Python COMPONENTS Interpreter Development)
 #find_package(pybind11 REQUIRED)
-find_package(CUDA)
+#find_package(CUDA)
 
 if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)  # the latter is a user definable variable
    enable_language(CUDA)
@@ -29,7 +34,7 @@ if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)
 		dme/DME/DriftEstimation.cu
 	)
 	target_compile_definitions(dme PUBLIC DME_EXPORTS)
-	target_compile_features(dme PUBLIC cxx_std_11)
+	target_compile_features(dme PUBLIC cxx_std_14)
 	set_property(TARGET dme PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 	target_include_directories(dme PUBLIC src/*.h)
@@ -47,7 +52,7 @@ if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)
                         # --gpu-architecture=sm_50
 
    link_directories(/usr/local/cuda/lib64)
-   include_directories("${CUDA_INCLUDE_DIRS}")
+   #include_directories("${CUDA_INCLUDE_DIRS}")
 
    #pybind11_add_module(spline src/pybind_spline.cpp)
    #target_link_libraries(dme PRIVATE dme_cu_impl dme_cpu_impl)
@@ -62,7 +67,7 @@ else()  # NO CUDA
 		dme/DME/StringUtils.cpp
 		dme/DME/DriftEstimation.cu
 	)
-	target_compile_features(dme PUBLIC cxx_std_11)
+	target_compile_features(dme PUBLIC cxx_std_14)
 	set_property(TARGET dme PROPERTY POSITION_INDEPENDENT_CODE ON)
 	target_compile_definitions(dme PUBLIC DME_EXPORTS)
 

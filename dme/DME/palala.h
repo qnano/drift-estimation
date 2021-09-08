@@ -213,29 +213,29 @@ struct const_host_param_buf {
 
 
 template<typename T>
-typename param_array<T> _make_array(T* ptr, size_t size, const char *dbgname) { 
-	auto r = param_array<T>(ptr, size); 
+typename param_array<T> _make_array(typename T* ptr, size_t size, const char *dbgname) { 
+	auto r = typename param_array<T>(ptr, size); 
 	r.setDebugName(dbgname);
 	return r;
 }
 
 template<typename T>
-typename const_param_array<T> _make_array(const T* ptr, size_t size, const char *dbgname) { 
-	auto r = const_param_array<T>(ptr, size);
+typename const_param_array<T> _make_array(typename const T* ptr, size_t size, const char *dbgname) { 
+	auto r = typename const_param_array<T>(ptr, size);
 	r.setDebugName(dbgname);
 	return r;
 }
 
 template<typename T>
-typename const_param_array<T> _const_array(const T* ptr, size_t size, const char *dbgname) { 
-	auto r = const_param_array<T>(ptr, size); 
+typename const_param_array<T> _const_array(typename const T* ptr, size_t size, const char *dbgname) { 
+	auto r = typename const_param_array<T>(ptr, size); 
 	r.setDebugName(dbgname);
 	return r;
 }
 
 template<typename T>
-typename param_array<T> _out_array(T* ptr, size_t size, const char *dbgname) {
-	auto r = param_array<T>(ptr, size); 
+typename param_array<T> _out_array(typename T* ptr, size_t size, const char *dbgname) {
+	auto r = typename param_array<T>(ptr, size); 
 	r.isOutputArray = true;
 	r.setDebugName(dbgname);
 	return r;
