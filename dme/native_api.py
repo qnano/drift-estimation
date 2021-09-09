@@ -22,17 +22,22 @@ class NativeAPI:
         if ctypes.sizeof(ctypes.c_voidp) == 4:
             raise RuntimeError(f"The DME drift estimation code can only be used on 64-bit systems.")
 
-        if useCuda:
-            dllpath = "dme-cuda"
-        else:
-            dllpath = "dme-cpu"
+        if os.name == 'nt':
+        
+            if useCuda:
+                dllpath = "dme-cuda"
+            else:
+                dllpath = "dme-cpu"
             
-        if debugMode:
-            dllpath = "Debug/" + dllpath
-        else:
-            dllpath = "Release/" + dllpath
+            if debugMode:
+                dllpath = "Debug/" + dllpath
+            else:
+                dllpath = "Release/" + dllpath
             
-        dllpath = f"/x64/{dllpath}.dll"
+            dllpath = f"/x64/{dllpath}.dll"
+        else:
+            dllpath = "/bin/libdme.so"
+
         abs_dllpath = os.path.abspath(thispath + dllpath)
         
         if debugMode:
@@ -113,9 +118,11 @@ class NativeAPI:
 
     def Close(self):
         if self.lib is not None:
-            # Free DLL so we can overwrite the file when we recompile
-            ctypes.windll.kernel32.FreeLibrary.argtypes = [ctypes.wintypes.HMODULE]
-            ctypes.windll.kernel32.FreeLibrary(self.lib._handle)
+            if os.name == 'nt':
+                # Free DLL so we can overwrite the file when we recompile
+                ctypes.windll.kernel32.FreeLibrary.argtypes = [ctypes.wintypes.HMODULE]
+                ctypes.windll.kernel32.FreeLibrary(self.lib._handle)
+            
             self.lib = None
         
         
