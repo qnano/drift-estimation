@@ -25,6 +25,9 @@ else()
    You may need to specify its path like \t'export CUDACXX=/usr/local/cuda/bin/nvcc'")
 endif()
 
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/dme/bin)
+
+#message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 
 if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)
 
