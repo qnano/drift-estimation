@@ -28,6 +28,7 @@ Example:
 
 #include <cassert>
 #include <future>
+#include "ctpl_stl.h"
 
 #ifdef __CUDACC__
 #define PALALA_CUDA
@@ -181,7 +182,7 @@ struct host_param_buf {
 	host_param_buf(std::vector<T>& v) {
 		h_data = &v[0];
 		size = v.size();
-}
+	}
 
 	~host_param_buf() {}
 	param_array<T> asParamArray() const { return param_array<T>(h_data, size); }
@@ -382,14 +383,19 @@ void call_func(int nx, int ny, bool singleThread, Function f, Tuple& t, std::ind
 				f(x, y, (_pass_to_kernel(std::get<I>(t))) ...);
 	}
 	else {
-		std::vector< std::future<void> > futures(nx*ny);
+		ctpl::thread_pool pool(std::thread::hardware_concurrency());
+
+		//std::vector< std::future<void> > futures(nx*ny);
 
 		for (int x = 0; x < nx; x++)
-			for (int y = 0; y < ny; y++) 
-				futures[x*ny+y] = std::async(f, x, y, (_pass_to_kernel(std::get<I>(t))) ...);
+			for (int y = 0; y < ny; y++)
+				pool.push([=](int id) {
+					f(x, y, (_pass_to_kernel(std::get<I>(t))) ...);
+				});
+		//futures[x*ny+y] = std::async(f, x, y, (_pass_to_kernel(std::get<I>(t))) ...);
 
-		for (auto& e : futures)
-			e.get();
+		//for (auto& e : futures)
+		//	e.get();
 	}
 }
 
