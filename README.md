@@ -4,17 +4,8 @@ Example code for "Drift correction in localization microscopy using entropy mini
 Article link:
 https://www.biorxiv.org/content/10.1101/2021.03.30.437682v1
 
-There are two options:
-
-* Standalone example, able to run on CUDA-free PCs.
-  See dme_example.py
-  
-* Example using photonpy library, which demonstrates the full SMLM pipeline. Currently requires CUDA, but we're working on making that optional:
-  See dme_photonpy_example.py
- 
-
-To run dme_example.py:
-----------------------
+To run dme_example.py using pre-build Windows binaries:
+-------------------------------------------------------
 
 1. Install python. Anaconda is recommended: https://www.anaconda.com/distribution/
 2. Create a virtual environment, such as an anaconda environment:
@@ -36,12 +27,11 @@ pip install tqdm scipy numpy matplotlib
 python dme_example.py
 ```
 
-To run dme_photonpy_example.py
-------------------------------
-
-1. Install CUDA toolkit 11.2
-2. Install photonpy library. Only windows 64-bit at the moment:
-
-```
-pip install photonpy=1.0.39
-```
+Build from source (tested on linux
+-----------------
+- On Windows, make sure to install CUDA 11.2 and build using dme/DriftEstimation.sln. Make sure to build in Release mode
+- On Linux (tested on ubuntu):
+  - Install CUDA from the nVidia website. Install cmake and use "cmake .", followed by "make" in the repository root. 
+  - This should build ./dme/bin/libdme.so
+  - dme_example.py should now run without errors. 
+- On MacOS, perhaps the above works, except for CUDA being unsupported.
