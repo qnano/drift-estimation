@@ -27,7 +27,7 @@ pip install tqdm scipy numpy matplotlib
 python dme_example.py
 ```
 
-Build from source (tested on linux
+Build from source (tested on ubuntu 20.04)
 -----------------
 - On Windows, make sure to install CUDA 11.2 and build using dme/DriftEstimation.sln. Make sure to build in Release mode
 - On Linux (tested on ubuntu):
