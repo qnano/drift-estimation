@@ -364,13 +364,12 @@ void call_func(int nx, bool singleThread, Function f, const Tuple& t, std::index
 			f(i, (_pass_to_kernel(std::get<I>(t))) ...);
 	}
 	else {
-		std::vector< std::future<void> > futures(nx);
+		ctpl::thread_pool pool(std::thread::hardware_concurrency());
 
 		for (int i = 0; i < nx; i++)
-			futures[i] = std::async(f, i, (_pass_to_kernel(std::get<I>(t))) ...);
+			pool.push([=](int _) { f(i, (_pass_to_kernel(std::get<I>(t)))...); });
 
-		for (auto& e : futures)
-			e.get();
+		pool.stop(true);
 	}
 }
 
@@ -385,13 +384,12 @@ void call_func(int nx, int ny, bool singleThread, Function f, Tuple& t, std::ind
 	else {
 		ctpl::thread_pool pool(std::thread::hardware_concurrency());
 
-		//std::vector< std::future<void> > futures(nx*ny);
-
 		for (int x = 0; x < nx; x++)
 			for (int y = 0; y < ny; y++)
 				pool.push([=](int id) {
 					f(x, y, (_pass_to_kernel(std::get<I>(t))) ...);
 				});
+		pool.stop(true);
 		//futures[x*ny+y] = std::async(f, x, y, (_pass_to_kernel(std::get<I>(t))) ...);
 
 		//for (auto& e : futures)

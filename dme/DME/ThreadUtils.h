@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <future>
+#include "ctpl_stl.h"
 
 template<typename TAction>
 void LockedAction(std::mutex& m, TAction fn) {
@@ -22,11 +23,10 @@ auto LockedFunction(std::mutex& m, TFunc fn) -> decltype(fn()) {
 template<typename Function>
 void ParallelFor(int n, Function f)
 {
-	std::vector< std::future<void> > futures(n);
+	ctpl::thread_pool pool(std::thread::hardware_concurrency());
 
 	for (int i = 0; i < n; i++)
-		futures[i] = std::async(std::launch::async, f, i);
+		pool.push([=](int id) { f(i); });
 
-	for (auto& e : futures)
-		e.get();
+	pool.stop(true);
 }
