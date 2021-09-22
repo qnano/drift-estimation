@@ -4,6 +4,16 @@ Example code for "Drift correction in localization microscopy using entropy mini
 Article link:
 https://www.biorxiv.org/content/10.1101/2021.03.30.437682v1
 
+Build from source (tested on windows and linux)
+-----------------------------------------------
+- On Windows, make sure to install CUDA 11.2 and build using dme/DriftEstimation.sln. Make sure to build in Release mode
+- On Linux (tested on Ubuntu 20.04):
+  - Install CUDA from the nVidia website. Install cmake and use "cmake .", followed by "make" in the repository root. 
+  - This should build ./dme/bin/libdme.so
+  - dme_example.py should now run without errors. 
+- On MacOS, CUDA is no longer supported by nVidia, so only the CPU version can be used. 
+  - Thanks to Duncan Ryan for help getting the GCC build working and confirming it runs on MacOS!
+
 To run dme_example.py using pre-build Windows binaries:
 -------------------------------------------------------
 
@@ -27,12 +37,3 @@ pip install tqdm scipy numpy matplotlib
 python dme_example.py
 ```
 
-Build from source
------------------
-- On Windows, make sure to install CUDA 11.2 and build using dme/DriftEstimation.sln. Make sure to build in Release mode
-- On Linux (tested on Ubuntu 20.04):
-  - Install CUDA from the nVidia website. Install cmake and use "cmake .", followed by "make" in the repository root. 
-  - This should build ./dme/bin/libdme.so
-  - dme_example.py should now run without errors. 
-- On MacOS, CUDA is no longer supported by nVidia, so only the CPU version can be used. 
-  - Thanks to Duncan Ryan for help getting the GCC build working and confirming it runs on MacOS!
