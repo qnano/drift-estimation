@@ -7,10 +7,13 @@
 // © Jelmer Cnossen 2018-2021
 
 // Note
+#define _CRT_SECURE_NO_WARNINGS // strncpy
+
 #include "palala.h"
 
 #include "ContainerUtils.h"
 #include "ThreadUtils.h"
+#include "StringUtils.h"
 
 #include <unordered_map>
 #include <numeric>
@@ -19,6 +22,8 @@
 #include "StringUtils.h"
 #include "KDTree.h"
 #include "KahanSum.h"
+
+#include "DriftEstimation.h"
 
 template<typename Pt>
 PLL_DEVHOST float ComputeKLDivergence(Pt posA, Pt crlbA, Pt posB, Pt crlbB) {
@@ -41,9 +46,22 @@ static Pt GetMeanCrlb(const Pt* crlb, int numspots)
 	return sum;
 }
 
+class IDriftEstimator {
+public:
+	virtual ~IDriftEstimator() {}
+	virtual int NumDims() = 0;
+	virtual int NumFrames() = 0;
+	virtual void GetDriftEstimate(float* data) = 0;
+	virtual bool Step(double& score) = 0;
+
+	const std::string& Status() { return status;  }
+
+protected:
+	std::string status;
+};
 
 template<int D>
-class LocalizationDriftEstimator {
+class LocalizationDriftEstimator : public IDriftEstimator {
 public:
 	std::vector<int> framenum;
 	std::vector <int> sifList, sifStart, sifCount; // sif: spots-in-frame. Stored in such a way it can be easily copied to cuda
@@ -54,8 +72,11 @@ public:
 	std::vector<Pt> positions;
 	std::vector<Pt> crlb;
 	Pt sigma; // in case of constant crlb
-	bool useConstCRLB;
+	bool useConstCRLB=true;
 	int iteration = 0;
+	double lastscore = 0;
+	float gradientStep = 0.0f;
+	int rejectCount = 0;
 	int maxNeighborCount = 0;
 
 	// the drift applied when neighborList was generated. If too far from the current drift estimate we need to rebuild it. 
@@ -65,44 +86,22 @@ public:
 
 	std::vector<Pt> deltaDriftPerSpot;
 
+	std::vector<Pt> prevDriftState, prevDriftStateDelta;
+
 	bool cuda = false;
 	Pt neighborSearchRange;
 
 	virtual ~LocalizationDriftEstimator() {}
 
-	LocalizationDriftEstimator(const Pt* xy, const Pt* crlb, const int* spotFramenum, int numspots, bool cuda, bool useConstCRLB) :
-		framenum(spotFramenum, spotFramenum + numspots),
-		useConstCRLB(useConstCRLB),
-		positions(xy, xy + numspots),
-		cuda(cuda),
-		deltaDriftPerSpot(numspots)
-	{
-		float searchRangeMultiplier = 3.0f;
-		if (useConstCRLB) {
-			sigma = *crlb;
-			neighborSearchRange = sigma * searchRangeMultiplier;
-		}
-		else {
-			neighborSearchRange = GetMeanCrlb(crlb, numspots) * searchRangeMultiplier;
-			this->crlb.assign(crlb, crlb + numspots);
-		}
-
-		int nframes = *std::max_element(spotFramenum, spotFramenum + numspots) + 1;
-		std::vector <std::vector<int>> spotsInFrame(nframes);
-		//std::vector <int> sifList, sifStart, sifCount; // sif: spots-in-frame. Stored in such a way it can be easily copied to cuda
-		for (int i = 0; i < numspots; i++) {
-			spotsInFrame[spotFramenum[i]].push_back(i);
-		}
-		for (auto& sif : spotsInFrame) {
-			sifCount.push_back((int)sif.size());
-			sifStart.push_back((int)sifList.size());
-			sifList.insert(sifList.end(), sif.begin(), sif.end());
-		}
-
-		undrifted.resize(numspots);
-	}
+	LocalizationDriftEstimator() { }
 
 	int NumFrames() { return (int)sifCount.size(); }
+	int NumDims() { return D; }
+	void GetDriftEstimate(float* dst) 
+	{
+		auto e = ComputeDriftPerFrame();
+		std::copy(e.begin(), e.end(), (Pt*)dst);
+	}
 
 
 	void UpdateNeighbors()
@@ -133,65 +132,82 @@ public:
 		UpdateNeighbors();
 	}
 
-	int Run(float gradientStep, float maxDrift, float* scores, int maxIterations, const Pt* initialDrift, int maxNeighbors, 
-		int (*progcb)(int iteration, const char* info, const float* currentEstimate))
+	void Begin(const Pt* xy, const Pt* crlb, const int* spotFramenum, int numspots, bool cuda, bool useConstCRLB, 
+		int maxNeighborCount, const Pt* initialDrift, float initialGradientStep)
 	{
-		driftState = InitializeDriftState(initialDrift);
 		iteration = 0;
+		this->maxNeighborCount = maxNeighborCount;
 
-		this->maxNeighborCount = maxNeighbors;
+		framenum.assign(spotFramenum, spotFramenum + numspots);
+		positions.assign(xy, xy + numspots);
+		this->cuda = cuda;
+		deltaDriftPerSpot.resize(numspots);
+		this->useConstCRLB = useConstCRLB;
+		gradientStep = initialGradientStep;
 
-		std::vector<Pt> prevDriftState, prevDriftStateDelta;
-
-		double lastscore = 0;
-		int rejectCount = 0;
-		for (; iteration < maxIterations; iteration++) {
-
-			UpdatePositions();
-
-			auto stateDeltaAndScore = ComputeDriftDelta(lastscore);
-			auto driftStateDelta = stateDeltaAndScore.second;
-
-			double totalscore = stateDeltaAndScore.first;
-			scores[iteration] = (float)totalscore;
-
-			if (iteration == 0 || lastscore < totalscore) { // improvement
-				prevDriftState = driftState;
-				gradientStep *= 1.2f;
-				std::string info = SPrintf("%d. Accepting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, totalscore, gradientStep, cuda, D);
-				if (progcb) {
-					if (!progcb(iteration, info.c_str(), (const float*)driftPerFrame.data()))
-						break;
-				}
-
-				lastscore = totalscore;
-				rejectCount = 0;
-				prevDriftStateDelta = driftStateDelta;
-			}
-			else {
-				if (gradientStep < 1e-16f || rejectCount == 10)
-					break;
-
-				std::string info = SPrintf("%d. Rejecting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, totalscore, gradientStep, cuda, D);
-				if (progcb) {
-					if (!progcb(iteration, info.c_str(), (const float*)driftPerFrame.data()))
-						break;
-				}
-
-				// restore drift to previous position
-				driftState = prevDriftState;
-				driftStateDelta = prevDriftStateDelta;
-
-				gradientStep *= 0.5f;
-				rejectCount++;
-			}
-
-			for (int i = 0; i < driftState.size(); i++)
-				driftState[i] += driftStateDelta[i] * gradientStep;
-
+		float searchRangeMultiplier = 3.0f;
+		if (useConstCRLB) {
+			sigma = *crlb;
+			neighborSearchRange = sigma * searchRangeMultiplier;
+		}
+		else {
+			neighborSearchRange = GetMeanCrlb(crlb, numspots) * searchRangeMultiplier;
+			this->crlb.assign(crlb, crlb + numspots);
 		}
 
-		return iteration;
+		int nframes = *std::max_element(spotFramenum, spotFramenum + numspots) + 1;
+		std::vector <std::vector<int>> spotsInFrame(nframes);
+		//std::vector <int> sifList, sifStart, sifCount; // sif: spots-in-frame. Stored in such a way it can be easily copied to cuda
+		for (int i = 0; i < numspots; i++) {
+			spotsInFrame[spotFramenum[i]].push_back(i);
+		}
+		for (auto& sif : spotsInFrame) {
+			sifCount.push_back((int)sif.size());
+			sifStart.push_back((int)sifList.size());
+			sifList.insert(sifList.end(), sif.begin(), sif.end());
+		}
+
+		undrifted.resize(numspots);
+
+		driftState = InitializeDriftState(initialDrift);
+	}
+
+	bool Step(double& score) override
+	{
+		UpdatePositions();
+
+		auto stateDeltaAndScore = ComputeDriftDelta(lastscore);
+		auto driftStateDelta = stateDeltaAndScore.second;
+
+		score = stateDeltaAndScore.first;
+
+		if (iteration == 0 || lastscore < score) { // improvement
+			prevDriftState = driftState;
+			gradientStep *= 1.2f;
+			this->status = SPrintf("%d. Accepting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, score, gradientStep, cuda, D);
+
+			lastscore = score;
+			rejectCount = 0;
+			prevDriftStateDelta = driftStateDelta;
+		}
+		else {
+			if (gradientStep < 1e-16f || rejectCount == 10)
+				return false;
+
+			this->status = SPrintf("%d. Rejecting step. Score: %f. Stepsize: %e [cuda=%d, dims=%d]", iteration, score, gradientStep, cuda, D);
+
+			// restore drift to previous position
+			driftState = prevDriftState;
+			driftStateDelta = prevDriftStateDelta;
+
+			gradientStep *= 0.5f;
+			rejectCount++;
+		}
+		iteration++;
+
+		for (int i = 0; i < driftState.size(); i++)
+			driftState[i] += driftStateDelta[i] * gradientStep;
+		return true;
 	}
 
 	virtual std::vector<Pt> InitializeDriftState(const Pt* driftPerFrame) = 0;
@@ -354,8 +370,7 @@ public:
 	typedef typename LocalizationDriftEstimator<D>::Pt Pt;
 	Pt sigma;
 
-	PerFrameMinEntropyDriftEstimator(const Pt* xy, const Pt* crlb, const int* spotFramenum, int numspots, bool cuda, bool useConstCRLB) :
-		LocalizationDriftEstimator<D>(xy, crlb, spotFramenum, numspots, cuda, useConstCRLB) {}
+	PerFrameMinEntropyDriftEstimator() : LocalizationDriftEstimator<D>() {}
 
 	virtual std::vector<Pt> InitializeDriftState(const Pt* driftPerFrame)
 	{
@@ -424,9 +439,7 @@ public:
 	typedef typename LocalizationDriftEstimator<D>::Pt Pt;
 	int framesPerBin;
 
-	SplineBasedMinEntropyDriftEstimator(const Pt* xy, const Pt* crlb, 
-		const int* spotFramenum, int numspots, int framesPerBin, bool cuda, bool constCRLB) : base(xy, crlb, spotFramenum, numspots, cuda, constCRLB),
-		framesPerBin(framesPerBin)
+	SplineBasedMinEntropyDriftEstimator(int framesPerBin) : framesPerBin(framesPerBin)
 	{}
 
 	virtual std::vector<Pt> InitializeDriftState(const Pt* driftPerFrame)
@@ -530,9 +543,8 @@ public:
 #define DME_OLD 8 // old version ignoring normalization terms, constant CRLB
 
 template<int D>
-int MinEntropyDriftEstimate_(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
-	int maxiterations, float* drift_, int framesPerBin, float gradientStep, float maxdrift, float* scores, int flags, int maxneighbors,
-	int (*progcb)(int iteration, const char* info, const float* drift))
+IDriftEstimator* DME_CreateInstance_(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
+	float* drift_, int framesPerBin, float gradientStep, float maxdrift, int flags, int maxneighbors)
 {
 	typedef Vector<float, D> V;
 	const V* coords = (const V*)coords_;
@@ -542,32 +554,69 @@ int MinEntropyDriftEstimate_(const float* coords_, const float* crlb_, const int
 	bool cuda = (flags & DME_CUDA) != 0;
 
 	if (framesPerBin == 1) {
-		estimator = new PerFrameMinEntropyDriftEstimator<D>(coords, crlb, spotFramenum, numspots, cuda, flags & DME_CONSTCRLB);
+		estimator = new PerFrameMinEntropyDriftEstimator<D>();// coords, crlb, spotFramenum, numspots, cuda, flags& DME_CONSTCRLB);
 	}
 	else {
-		estimator = new SplineBasedMinEntropyDriftEstimator<D>(coords, crlb, spotFramenum, numspots, framesPerBin, cuda, flags & DME_CONSTCRLB);
+		estimator = new SplineBasedMinEntropyDriftEstimator<D>(framesPerBin);/// coords, crlb, spotFramenum, numspots, framesPerBin, cuda, flags& DME_CONSTCRLB);
 	}
 
-	int its = estimator->Run(gradientStep, maxdrift, scores, maxiterations, (const V*)drift_, maxneighbors, progcb);
+	estimator->Begin(coords, crlb, spotFramenum, numspots, cuda, flags & DME_CONSTCRLB, maxneighbors, (const V*)drift_, gradientStep);
 
-	auto drift = estimator->ComputeDriftPerFrame();
-	std::copy(drift.begin(), drift.end(), (V*)drift_);
-	return its;
+	return estimator;
 }
 
-CDLL_EXPORT int MinEntropyDriftEstimate(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
-	int maxiterations, float* drift, int framesPerBin, float gradientStep, float maxdrift, float* scores, int flags, int maxneighbors,
-	int (*progcb)(int iteration, const char* info, const float *currentDriftEstimate))
+CDLL_EXPORT IDriftEstimator* DME_CreateInstance(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
+	float* drift, int framesPerBin, float gradientStep, float maxdrift, int flags, int maxneighbors)
 {
 	try {
+		IDriftEstimator * inst = 0;
+
 		if (flags & DME_3D)
-			return MinEntropyDriftEstimate_<3>(coords_, crlb_, spotFramenum, numspots, maxiterations, drift, framesPerBin, gradientStep, maxdrift, scores, flags, maxneighbors, progcb);
+			inst = DME_CreateInstance_<3>(coords_, crlb_, spotFramenum, numspots, drift, framesPerBin, gradientStep, maxdrift, flags, maxneighbors);
 		else
-			return MinEntropyDriftEstimate_<2>(coords_, crlb_, spotFramenum, numspots, maxiterations, drift, framesPerBin, gradientStep, maxdrift, scores, flags, maxneighbors, progcb);
+			inst = DME_CreateInstance_<2>(coords_, crlb_, spotFramenum, numspots, drift, framesPerBin, gradientStep, maxdrift, flags, maxneighbors);
+		return inst;
 	}
 	catch (const std::exception& exc) {
-		DebugPrintf("MinEntropyDriftEstimate Exception: %s\n", exc.what());
+		DebugPrintf("DME_CreateInstance Exception: %s\n", exc.what());
 		return 0;
 	}
 }
 
+CDLL_EXPORT int DME_Step(IDriftEstimator* estimator, char* status_msg, int status_max_length, float* score, float* drift_estimate)
+{
+	try {
+		double score_;
+		bool keepGoing = estimator->Step(score_);
+
+
+		if (status_msg) {
+			strncpy(status_msg, estimator->Status().c_str(), status_max_length);
+		}
+
+		if (score) {
+			*score = (float)score_;
+		}
+		
+		if (drift_estimate) {
+			estimator->GetDriftEstimate(drift_estimate);
+		}
+
+		return keepGoing ? 1 : 0;
+	}
+	catch (const std::exception& exc) {
+		DebugPrintf("DME_Step Exception: %s\n", exc.what());
+		return 0;
+	}
+}
+
+
+CDLL_EXPORT void DME_Close(IDriftEstimator* estim)
+{
+	try {
+		delete estim;
+	}
+	catch (const std::exception& exc) {
+		DebugPrintf("DME_Close Exception: %s\n", exc.what());
+	}
+}

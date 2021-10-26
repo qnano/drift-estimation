@@ -20,10 +20,9 @@ class NativeAPI:
         thispath = os.path.dirname(os.path.abspath(__file__))
 
         if ctypes.sizeof(ctypes.c_voidp) == 4:
-            raise RuntimeError(f"The DME drift estimation code can only be used on 64-bit systems.")
+            raise RuntimeError("The DME drift estimation code can only be used on 64-bit systems.")
 
         if os.name == 'nt':
-        
             if useCuda:
                 dllpath = "dme-cuda"
             else:
@@ -63,32 +62,45 @@ class NativeAPI:
 
         self.SetDebugPrintCallback(debugPrint)
         
-        self.ProgressCallback = ctypes.CFUNCTYPE(
-            ctypes.c_int32,  # continue
-            ctypes.c_int32,  # iteration
-            ctypes.c_char_p, # info
-            ctypes.POINTER(ctypes.c_float)
-            #ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # drift: float[frames, dims]
-        )
-        
-        
-        self._MinEntropyDriftEstimate = self.lib.MinEntropyDriftEstimate
-        self._MinEntropyDriftEstimate.argtypes = [
+        """
+        CDLL_EXPORT IDriftEstimator* DME_CreateInstance(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
+                                                         float* drift, int framesPerBin, float gradientStep, float maxdrift, int flags, int maxneighbors);
+        """
+        self._DME_CreateInstance = self.lib.DME_CreateInstance
+        self._DME_CreateInstance.argtypes = [
             ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # xy: float[numspots, dims]
             ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # crlb: float[numspots, dims] or float[dims]
             ctl.ndpointer(np.int32, flags="aligned, c_contiguous"),  # framenum
             ctypes.c_int32,  # numspots
-            ctypes.c_int32, #maxit
             ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # drift XY
             ctypes.c_int32, # framesperbin
             ctypes.c_float, # gradientstep
             ctypes.c_float, # maxdrift
-            ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # scores
             ctypes.c_int32, # flags
             ctypes.c_int32, # maxneighbors
-            self.ProgressCallback] # flags
-        self._MinEntropyDriftEstimate.restype = ctypes.c_int32
+            ] 
+        self._DME_CreateInstance.restype = ctypes.c_void_p
+
+        """        
+        // Drift estimation step. Zero pointers can be passed to status_msg, score, and drift_estimate if not needed
+        CDLL_EXPORT int DME_Step(IDriftEstimator* estimator, char* status_msg, int status_max_length, float* score, float* drift_estimate);
+        """
         
+        self._DME_Step = self.lib.DME_Step
+        self._DME_Step.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_char_p,
+            ctypes.c_int32,
+            ctl.ndpointer(np.float32, flags="aligned, c_contiguous"),  # score (just passed as a length 1 numpy array)
+            ctl.ndpointer(np.float32, flags="aligned, c_contiguous")  # drift_estimate [numframes, numdims]
+            ]
+        self._DME_Step.restype = ctypes.c_int
+        
+        self._DME_Close = self.lib.DME_Close
+        self._DME_Close.argtypes = [ ctypes.c_void_p ]
+
+
+                
         
         # (float * image, int imgw, int imgh, float * spotList, int nspots)
         self._Gauss2D_Draw = lib.Gauss2D_Draw
@@ -134,9 +146,9 @@ class NativeAPI:
         framenum = np.ascontiguousarray(framenum,dtype=np.int32)
         drift = np.ascontiguousarray(drift,dtype=np.float32)
         
-        nframes = np.max(framenum)+1
+        nframes = len(drift) # np.max(framenum)+1
         
-        assert len(drift)>=nframes and drift.shape[1]==positions.shape[1]
+        assert drift.shape[1]==positions.shape[1]
 
         if len(drift)>nframes:
             drift = drift[:nframes]
@@ -171,11 +183,29 @@ class NativeAPI:
             estimate = ctl.as_array(estimate, (nframes, positions.shape[1]))
             return progcb(iteration, info, estimate)
 
-        nIterations = self._MinEntropyDriftEstimate(
-            positions, crlb, framenum, len(positions), iterations, drift, framesPerBin,
-            stepsize, maxdrift, scores, flags, maxneighbors, self.ProgressCallback(cb))
+        inst = self._DME_CreateInstance(positions, crlb, framenum, len(positions), drift, framesPerBin,
+                                        stepsize, maxdrift, flags, maxneighbors)
 
-        return drift, scores[:nIterations]
+        statusbuf = ctypes.create_string_buffer(100)
+        score = np.zeros((1,), dtype=np.float32)
+        drift_estimate = np.zeros((nframes, positions.shape[1]), dtype=np.float32)
+
+        i = 0
+        try:
+            while i<iterations:
+                r = self._DME_Step(inst, statusbuf, len(statusbuf), score, drift_estimate)
+                status=statusbuf.value.decode('utf-8')
+                
+                #print(f'status={status}. score={score[0]}')
+                cb(i, status, drift_estimate)
+                if r == 0:
+                    break
+                i+=1
+
+        finally:    
+            self._DME_Close(inst)
+
+        return drift_estimate, scores[:i]
 
 
     def __enter__(self):
