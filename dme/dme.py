@@ -20,8 +20,10 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
           rccZoom=2,
           estimatePrecision=True,
           maxNeighbors=1000,
+          maxIterations=2000,
           coarseMaxIterations=1000,
           useDebugLibrary=False,
+          numframes=None,
           traces=None):
     """
     Estimate drift using minimum entropy method. Parameters:
@@ -55,7 +57,9 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
     
     """
     ndims = positions.shape[1]
-    numframes = np.max(framenum)+1
+    
+    if numframes is None:
+        numframes = np.max(framenum)+1
 
     initial_drift = np.zeros((numframes,ndims))
     
@@ -90,7 +94,6 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
         if not perSpotCRLB:
             crlb = np.mean(crlb,0)[:ndims]
             
-        numIterations = 10000
         step = 0.000001
 
         splitAxis = np.argmax( np.var(positions[:,:2],0) ) # only in X or Y
@@ -109,10 +112,13 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
                             
         maxdrift=0 # ignored at the moment
         if coarseFramesPerBin is not None:
+            
+            assert len(coarseSigma) == positions.shape[1]
+            
             print(f"Computing initial coarse drift estimate... ({coarseFramesPerBin} frames/bin)",flush=True)
             with tqdm.tqdm() as pbar:
                 def update_pbar(i,info,drift_est): 
-                    pbar.set_description(info.decode("utf-8")); pbar.update(1)
+                    pbar.set_description(info); pbar.update(1)
                     if traces is not None:
                         traces.append(drift_est.copy())
                     return 1
@@ -124,27 +130,27 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
         print(f"\nEstimating drift... ({framesperbin} frames/bin)",flush=True)
         with tqdm.tqdm() as pbar:
             def update_pbar(i,info,drift_est): 
-                pbar.set_description(info.decode("utf-8"));pbar.update(1)
+                pbar.set_description(info);pbar.update(1)
                 if traces is not None:
                     traces.append(drift_est.copy())
                 return 1
-            update_pbar(0,''.encode('utf-8'),initial_drift*1)
+            update_pbar(0,'',initial_drift*1)
             drift,score = dll.MinEntropyDriftEstimate(
-                positions, framenum, initial_drift*1, crlb, numIterations, step, maxdrift, framesPerBin=framesperbin, maxneighbors=maxNeighbors,
+                positions, framenum, initial_drift*1, crlb, maxIterations, step, maxdrift, framesPerBin=framesperbin, maxneighbors=maxNeighbors,
                 cuda=useCuda, progcb=update_pbar)
                 
         if estimatePrecision:
             print(f"\nComputing drift estimation precision... (Splitting axis={splitAxis})",flush=True)
             with tqdm.tqdm() as pbar:
                 def update_pbar(i,info,drift_est): 
-                    pbar.set_description(info.decode("utf-8"));pbar.update(1)
+                    pbar.set_description(info);pbar.update(1)
                     return 1
                 drift_set1,score_set1 = dll.MinEntropyDriftEstimate(
-                    positions[set1], framenum[set1], initial_drift*1, crlb_set1, numIterations, step, maxdrift, 
+                    positions[set1], framenum[set1], initial_drift*1, crlb_set1, maxIterations, step, maxdrift, 
                     framesPerBin=framesperbin,cuda=useCuda, progcb=update_pbar)
     
                 drift_set2,score_set2 = dll.MinEntropyDriftEstimate(
-                    positions[set2], framenum[set2], initial_drift*1, crlb_set2, numIterations, step, maxdrift, 
+                    positions[set2], framenum[set2], initial_drift*1, crlb_set2, maxIterations, step, maxdrift, 
                     framesPerBin=framesperbin,cuda=useCuda,progcb=update_pbar)
     
         drift -= np.mean(drift,0)
