@@ -540,7 +540,6 @@ public:
 #define DME_3D 1
 #define DME_CUDA 2
 #define DME_CONSTCRLB 4
-#define DME_OLD 8 // old version ignoring normalization terms, constant CRLB
 
 template<int D>
 IDriftEstimator* DME_CreateInstance_(const float* coords_, const float* crlb_, const int* spotFramenum, int numspots,
@@ -554,10 +553,10 @@ IDriftEstimator* DME_CreateInstance_(const float* coords_, const float* crlb_, c
 	bool cuda = (flags & DME_CUDA) != 0;
 
 	if (framesPerBin == 1) {
-		estimator = new PerFrameMinEntropyDriftEstimator<D>();// coords, crlb, spotFramenum, numspots, cuda, flags& DME_CONSTCRLB);
+		estimator = new PerFrameMinEntropyDriftEstimator<D>();
 	}
 	else {
-		estimator = new SplineBasedMinEntropyDriftEstimator<D>(framesPerBin);/// coords, crlb, spotFramenum, numspots, framesPerBin, cuda, flags& DME_CONSTCRLB);
+		estimator = new SplineBasedMinEntropyDriftEstimator<D>(framesPerBin);
 	}
 
 	estimator->Begin(coords, crlb, spotFramenum, numspots, cuda, flags & DME_CONSTCRLB, maxneighbors, (const V*)drift_, gradientStep);
