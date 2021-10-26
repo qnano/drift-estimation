@@ -16,6 +16,7 @@
   <ItemGroup>
     <ClInclude Include="CudaUtils.h" />
     <ClInclude Include="DLLMacros.h" />
+    <ClInclude Include="DriftEstimation.h" />
     <ClInclude Include="KahanSum.h" />
     <ClInclude Include="KDTree.h" />
     <ClInclude Include="palala.h" />
