@@ -22,20 +22,20 @@ class NativeAPI:
         if ctypes.sizeof(ctypes.c_voidp) == 4:
             raise RuntimeError("The DME drift estimation code can only be used on 64-bit systems.")
 
-        if os.name == 'nt':
-            if useCuda:
-                dllpath = "dme-cuda"
-            else:
-                dllpath = "dme-cpu"
-            
-            if debugMode:
-                dllpath = "Debug/" + dllpath
-            else:
-                dllpath = "Release/" + dllpath
-            
-            dllpath = f"/x64/{dllpath}.dll"
+        if useCuda:
+            name = "dme_cuda"
         else:
-            dllpath = "/bin/libdme.so"
+            name = "dme_cpu"
+        
+        if debugMode:
+            dllpath = "debug/"
+        else:
+            dllpath = "release/"
+
+        if os.name == 'nt':
+            dllpath = f"/../bin/{dllpath}{name}.dll"
+        else:
+            dllpath = f"/../bin/{dllpath}lib{name}.so"
 
         abs_dllpath = os.path.abspath(thispath + dllpath)
         
