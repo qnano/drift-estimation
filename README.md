@@ -9,7 +9,7 @@ Build from source (tested on windows and linux)
 - On Windows, install cmake and make sure it is available in the path. Then, run build_windows.bat
 - On Linux (tested on Ubuntu 20.04):
   - Install CUDA from the nVidia website. Install cmake and use "cmake .", followed by "make" in the repository root. 
-  - This should build ./dme/bin/libdme.so
+  - This should build ./bin/release/libdme.so
   - dme_example.py should now run without errors. 
 - On MacOS, CUDA is no longer supported by nVidia, so only the CPU version can be used. 
   - Thanks to Duncan Ryan for help getting the GCC build working and confirming it runs on MacOS!
