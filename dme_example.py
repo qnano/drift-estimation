@@ -11,7 +11,7 @@ from dme.rcc import rcc3D
 from dme.native_api import NativeAPI
 
 # Need to have CUDA installed
-use_cuda=False
+use_cuda=True
 
 
 # Simulate an SMLM dataset in 3D with blinking molecules
