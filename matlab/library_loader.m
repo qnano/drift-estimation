@@ -1,15 +1,14 @@
 function [varargout] = library_loader(string_func, usecuda, varargin) 
 
-% maybe add debug/release mode
-
+[path,name,ext]=fileparts(mfilename('fullpath'));
 
 if usecuda
-    fn= '.\dme\x64\Release\dme-cuda.dll';
+    fn= [path '\..\bin\release\dme_cuda.dll'];
 else
-    fn= '.\dme\x64\Release\dme-cpu.dll';
+    fn= [path '\..\bin\release\dme_cpu.dll'];
 end
 
-hfile = '.\dme\DME\DriftEstimation.h';
+hfile = [path '\..\dme\DME\DriftEstimation.h'];
 
 loadlibrary(fn, hfile, 'alias', 'dme');
 
