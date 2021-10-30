@@ -6,7 +6,7 @@ https://www.biorxiv.org/content/10.1101/2021.03.30.437682v1
 
 Build from source (tested on windows and linux)
 -----------------------------------------------
-- On Windows, make sure to install CUDA 11.2 and build using dme/DriftEstimation.sln. Make sure to build in Release mode
+- On Windows, install cmake and make sure it is available in the path. Then, run build_windows.bat
 - On Linux (tested on Ubuntu 20.04):
   - Install CUDA from the nVidia website. Install cmake and use "cmake .", followed by "make" in the repository root. 
   - This should build ./dme/bin/libdme.so
