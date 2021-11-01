@@ -95,7 +95,7 @@ elseif strcmp(string_func, 'dme')
     varargout{3} = i;
     
 else
-    error('Error: wrong input in testapi')
+    error('Error: wrong input')
 end
 
 
