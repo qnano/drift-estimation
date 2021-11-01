@@ -50,7 +50,12 @@ end
 drift_trace = cumsum(drift_trace,1);
 drift_trace = drift_trace - mean(drift_trace, 1);
 [localizations,framenum] = smlm_simulation(drift_trace, fov_width, loc_error, 200, n_frames, on_prob);
-clrb = loc_error;
+
+% You can either pass a single set of CRLB values (one for each dimension)
+crlb = loc_error;
+% Or you can pass a CRLB value for each localization individually
+crlb = repmat(loc_error, length(localizations), 1);
+
 
 %% RCC computation
 if size(drift_trace,2) == 3
@@ -58,11 +63,10 @@ if size(drift_trace,2) == 3
     [drift_xyz] = rcc3D(localizations, framenum, timebins, zoom, sigma, maxpairs,  usecuda);
 else
     [drift_xyz] = rcc(localizations, framenum, timebins, zoom, sigma, maxpairs, usecuda);
-    
 end
 %% Drift estimation
-drift = dme_estimate(localizations, framenum, clrb, drift_xyz, usecuda, coarse_frames_per_bin, ...
-    framesperbin, maxneighbors_coarse,maxneighbors_regular, coarseSigma, max_iter_coarse,max_iter, gradientstep, precision_est );
+drift = dme_estimate(localizations, framenum, crlb, drift_xyz, usecuda, coarse_frames_per_bin, ...
+    framesperbin, maxneighbors_coarse, maxneighbors_regular, coarseSigma, max_iter_coarse,max_iter, gradientstep, precision_est );
 
 %% Plot
 h= figure(1)

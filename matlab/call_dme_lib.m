@@ -1,4 +1,4 @@
-function [varargout] = library_loader(string_func, usecuda, varargin) 
+function [varargout] = call_dme_lib(string_func, usecuda, varargin) 
 
 [path,name,ext]=fileparts(mfilename('fullpath'));
 
@@ -53,7 +53,11 @@ elseif strcmp(string_func, 'dme')
         flags = bitor(flags,1);
     end
     
-    flags = bitor(flags, 4); % always, no variable CRLB implementation
+    if length(crlb) == size(coords,2)
+        flags = bitor(flags, 4); % always, no variable CRLB implementation
+    else
+        assert(isequal(size(crlb), size(coords)), 'CRLB matrix should either be [1, ndims] or [npos, ndims]');
+    end
     
     drift = libpointer('singlePtr', drift' );
     
@@ -63,29 +67,28 @@ elseif strcmp(string_func, 'dme')
     inst = calllib('dme', 'DME_CreateInstance', single(coords'), single(crlb'), int32(spotFramenum'), int32(numspots'), drift, int32(framesperbin') ...
                     , single(gradientstep'), single(maxdrift'), int32(flags), int32(maxneighbors));
     
-   
-    statusbuf = blanks(100);
-    len_status = length(statusbuf);
-    statusbuf = libpointer('cstring', statusbuf');
+
+    statusbufsize = 200;
     scores = zeros(max_iter);
     score = single(0);
-    scorep = libpointer('singlePtr', score' );
     
+    cr='';
     for i = 1:max_iter
          %CDLL_EXPORT int DME_Step(IDriftEstimator* estimator, char* status_msg, int status_max_length, float* score, float* drift_estimate);
-        r = calllib('dme', 'DME_Step', inst, statusbuf, int32(len_status), scorep, drift);
-        scores(i) = scorep.value;
-        
+        [r, inst_, statusmsg, score, drift_] = calllib('dme', 'DME_Step', inst, blanks(statusbufsize), statusbufsize, score, drift);
+        scores(i) = score;
+
+        fprintf(cr);
+        fprintf('%s', statusmsg);
+        cr = repmat('\b',1,length(statusmsg));
+
         if r == 0
-            
             break
         end
-            
-    end        
-    
+    end
+    fprintf('%s\n',statusmsg);
     
     calllib('dme', 'DME_Close', inst);
-    
     
     varargout{1} = drift.value';
     varargout{2} = scores(1:i);
