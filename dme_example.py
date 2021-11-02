@@ -72,7 +72,8 @@ estimated_drift,_ = dme_estimate(localizations, framenum,
              useCuda=use_cuda,
              useDebugLibrary=False)
 
-estimated_drift_rcc = rcc3D(localizations, framenum, timebins=10, zoom=1)
+with NativeAPI(use_cuda) as dll:    
+    estimated_drift_rcc = rcc3D(localizations, framenum, timebins=10, zoom=1, dll=dll)
 
 
 rmsd = np.sqrt(np.mean((estimated_drift-drift_trace)**2, 0))
