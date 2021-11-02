@@ -19,7 +19,8 @@ set(EXECUTABLE_OUTPUT_PATH "bin")
 #find_package(pybind11 REQUIRED)
 #find_package(CUDA)
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/dme/bin)
+# This is used on linux but ignored by the visual studio builds
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/release)
 
 #message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 
