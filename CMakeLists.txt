@@ -26,10 +26,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/dme/bin)
 if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)
 	enable_language(CUDA)
 	
-	if (UNIX)
-		# cuda compiler path for linux, as cmake cant find it
-		set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-	endif (UNIX)
+	#if (UNIX)
+			# cuda compiler path for linux, as cmake cant find it
+			#	set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+			#	endif (UNIX)
 
    enable_language(CUDA)
    add_compile_definitions(CUDA_ENABLED)
