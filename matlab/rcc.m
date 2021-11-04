@@ -24,7 +24,7 @@ for k = 1:timebins
     end
     
     % draw gaussians
-    images(k,:,:) = library_loader('gauss',usecuda,  img,size(img,2), size(img,1), spots, size(spots,1));
+    images(k,:,:) = call_dme_lib('gauss',usecuda,  img,size(img,2), size(img,1), spots, size(spots,1));
     
 end
 
