@@ -34,8 +34,11 @@ setup(
     ],
     packages=['dme'],
     include_package_data=True,
-    package_data={"dme": ["bin/release/dme_cpu.dll","bin/release/dme_cuda.dll"]},
-	install_requires=[
+    package_data={"dme": [
+        "bin/release/dme_cpu.dll",
+        "bin/release/dme_cuda.dll",
+        "bin/release/libdme_cuda.so"]},
+    install_requires=[
 		'numpy',
 		'matplotlib',
 		'tqdm'
