@@ -6,6 +6,8 @@ https://www.biorxiv.org/content/10.1101/2021.03.30.437682v1
 
 Build from source (tested on windows and linux)
 -----------------------------------------------
+DISCLAIMER: My cmake file was created entirely by trial and error, please let me know if I'm doing something weird.
+
 - On Windows, install cmake and make sure it is available in the path. Then, run build_windows.bat
 - On Linux (tested on Ubuntu 20.04):
   - Install CUDA from the nVidia website. Install cmake and use "cmake .", followed by "make" in the repository root. 

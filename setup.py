@@ -17,7 +17,7 @@ class BinaryDistribution(Distribution):
         return True
 
 setup(
-    name="drift-dme",
+    name="dme",
     version="1.0",
     author="Jelmer Cnossen",
     author_email="j.cnossen@gmail.com",
@@ -25,7 +25,7 @@ setup(
     long_description=long_description,
  #   long_description_content_type="text/markdown",
 #    url="https",
-    platforms=['nt'],
+#    platforms=['nt'],
     classifiers=[
         "Programming Language :: Python :: 3",
 		"Programming Language :: C++",
@@ -37,6 +37,7 @@ setup(
     package_data={"dme": [
         "bin/release/dme_cpu.dll",
         "bin/release/dme_cuda.dll",
+        "bin/release/msvcp140.dll",
         "bin/release/libdme_cuda.so"]},
     install_requires=[
 		'numpy',
