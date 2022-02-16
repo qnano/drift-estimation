@@ -13,7 +13,7 @@ endif()
 
 #set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-set(EXECUTABLE_OUTPUT_PATH "bin")
+set(EXECUTABLE_OUTPUT_PATH "dme/bin")
 
 #find_package(Python COMPONENTS Interpreter Development)
 #find_package(pybind11 REQUIRED)
@@ -56,8 +56,8 @@ if(CMAKE_CUDA_COMPILER AND NOT CUDA_DISABLED)
    #add_library(dme STATIC src/DriftEstimation.cu)
    #target_include_directories(dme PUBLIC include)
    set_target_properties(dme_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON POSITION_INDEPENDENT_CODE ON)
-	set_target_properties(dme_cuda PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "bin/release/")
-	set_target_properties(dme_cuda PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "bin/debug/")
+	set_target_properties(dme_cuda PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "dme/bin/release/")
+	set_target_properties(dme_cuda PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "dme/bin/debug/")
    set_property(TARGET dme_cuda PROPERTY CUDA_ARCHITECTURES 72 75)
    target_compile_options(dme_cuda PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:  # seems to be unnecssary but keep the code block for the moment
                         --expt-relaxed-constexpr
@@ -87,8 +87,8 @@ else()  # NO CUDA
 		dme/DME/StringUtils.cpp
 		dme/DME/DriftEstimation.cpp
 	)
-	set_target_properties(dme_cpu PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "bin/release/")
-	set_target_properties(dme_cpu PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "bin/debug/")
+	set_target_properties(dme_cpu PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "dme/bin/release/")
+	set_target_properties(dme_cpu PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "dme/bin/debug/")
 	target_compile_features(dme_cpu PUBLIC cxx_std_14)
 	set_property(TARGET dme_cpu PROPERTY POSITION_INDEPENDENT_CODE ON)
 	target_compile_definitions(dme_cpu PUBLIC DME_EXPORTS)
