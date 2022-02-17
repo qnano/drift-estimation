@@ -20,7 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "dme/bin")
 #find_package(CUDA)
 
 # This is used on linux but ignored by the visual studio builds
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/release)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/dme/bin/release)
 
 #message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 
