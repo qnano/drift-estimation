@@ -164,9 +164,14 @@ public:
 		nbCounts.resize(pts.size());
 		std::vector< std::vector<int> > neighborLists(pts.size());
 
-		ParallelFor((int)pts.size(), [&](int i) {
-			kdtree.AddPointsInEllipsoidToList(pts[i], searchRange, neighborLists[i], neigborCountLimit);
-			});
+		int N = 128; // my multithreading on linux seems to have a lot of overhead for unknown reasons
+		ParallelFor(((int)pts.size() + N-1) / N, [&](int i) {
+			for (int j = 0; j < N; j++) {
+				int ix = i * N + j;
+				if (ix < pts.size())
+					kdtree.AddPointsInEllipsoidToList(pts[ix], searchRange, neighborLists[ix], neigborCountLimit);
+			}
+		});
 
 		int s = 0;
 		for (auto& l : neighborLists)

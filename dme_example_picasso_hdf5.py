@@ -17,7 +17,7 @@ fn = 'example_data/gattaquant 80nm RY.hdf5'
 ds = Dataset.load(fn)
 print(ds) # prints number of localizations
 
-drift_trace = dme_estimate(ds.pos, ds.frame, ds.crlb.pos,
+drift_trace, (set1,set2)  = dme_estimate(ds.pos, ds.frame, ds.crlb.pos,
              framesperbin = 10,
              imgshape=ds.imgshape,  # size of field of view in pixels (same units as ds.pos)
              useCuda=True,
