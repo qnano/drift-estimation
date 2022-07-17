@@ -108,8 +108,14 @@ private:
 				MakeLeafNode(pts, indices);
 			}
 			else {
-				for (int i = 0; i < 2; i++) {
-					childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf);
+				if (indices.size() > 100000) {
+					ParallelFor(2, [&](int i) {
+						childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf);
+					});
+				}
+				else {
+					for (int i=0;i<2;i++)
+						childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf);
 				}
 			}
 		}
