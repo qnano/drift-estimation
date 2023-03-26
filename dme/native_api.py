@@ -35,7 +35,7 @@ class NativeAPI:
         if os.name == 'nt':
             dllpath = f"/../bin/{dllpath}{name}.dll"
         else:
-            dllpath = f"/../bin/{dllpath}lib{name}.so"
+            dllpath = f"/bin/{dllpath}lib{name}.so"
 
         abs_dllpath = os.path.abspath(thispath + dllpath)
         
