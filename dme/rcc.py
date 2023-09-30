@@ -111,7 +111,7 @@ def rcc(xy, framenum, timebins, dll: NativeAPI, zoom=1,
     shift_x -= shift_x[0]
     shift = -np.vstack((shift_x,shift_y)).T / zoom
         
-    t = (0.5+np.arange(timebins))*framesperbin
+    t = np.linspace(0, nframes, timebins)#  (0.5+np.arange(timebins))*framesperbin
     
     shift -= np.mean(shift,0)
 
