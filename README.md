@@ -4,6 +4,9 @@ Example code for "Drift correction in localization microscopy using entropy mini
 Article link:
 https://www.biorxiv.org/content/10.1101/2021.03.30.437682v1
 
+Google colab example (For some reason the CPU multithreading runs very slow on linux though)
+https://colab.research.google.com/github/qnano/drift-estimation/blob/master/dme_example_colab.ipynb
+
 Build from source (tested on windows and linux)
 -----------------------------------------------
 DISCLAIMER: My cmake file was created entirely by trial and error, please let me know if I'm doing something weird.
