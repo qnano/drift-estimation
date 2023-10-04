@@ -11,19 +11,22 @@
 #include <array>
 #include "Vector.h"
 
+#include "ctpl_stl.h"
+
+
 template<typename T, int D>
 class KDTree {
 public:
 	typedef Vector<T, D> Point;
 
-	KDTree(const std::vector<Point>& pts, int maxPointsPerLeaf) {
+	KDTree(const std::vector<Point>& pts, int maxPointsPerLeaf, ctpl::thread_pool *threadPool=0) {
 		std::vector<int> indices(pts.size());
 		std::iota(indices.begin(), indices.end(), 0);
-		Build(pts, indices, maxPointsPerLeaf);
+		Build(pts, indices, maxPointsPerLeaf, threadPool);
 	}
 
-	KDTree(const std::vector<Point>& pts, const std::vector<int>& indices, int maxPointsPerLeaf) {
-		Build(pts, indices, maxPointsPerLeaf);
+	KDTree(const std::vector<Point>& pts, const std::vector<int>& indices, int maxPointsPerLeaf, ctpl::thread_pool* threadPool = 0) {
+		Build(pts, indices, maxPointsPerLeaf, threadPool);
 	}
 
 	std::vector<int> GetPointsInEllipsoid(Point center, Point radius) {
@@ -76,7 +79,7 @@ private:
 		divider = T{};
 	}
 
-	void Build(const std::vector<Point>& pts, const std::vector<int>& indices, int maxPointsPerLeaf) {
+	void Build(const std::vector<Point>& pts, const std::vector<int>& indices, int maxPointsPerLeaf, ctpl::thread_pool* threadPool = 0) {
 		if (indices.size() <= maxPointsPerLeaf) 
 			MakeLeafNode(pts, indices);
 		else {
@@ -108,14 +111,15 @@ private:
 				MakeLeafNode(pts, indices);
 			}
 			else {
-				if (indices.size() > 100000) {
-					ParallelFor(2, [&](int i) {
-						childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf);
-					});
+				if (indices.size() > 100000 && threadPool != 0) {
+					for (int i = 0; i < 2; i++)
+						threadPool->push([&,i](int id) { 
+							childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf, threadPool); 
+						});
 				}
 				else {
 					for (int i=0;i<2;i++)
-						childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf);
+						childs[i] = std::make_unique<KDTree>(pts, subidx[i], maxPointsPerLeaf, threadPool);
 				}
 			}
 		}
@@ -159,7 +163,10 @@ public:
 	template<typename TFilterFn>
 	void Build(const std::vector<Point>& ptsA, const std::vector<Point>& ptsB, Point searchRange, TFilterFn filter, int neigborCountLimit)
 	{
-		KDTree<float, D> kdtree(ptsB, 20);
+		ctpl::thread_pool pool(std::thread::hardware_concurrency());
+		KDTree<float, D> kdtree(ptsB, 20, &pool);
+		pool.stop(true);
+
 		Build(kdtree, ptsA, searchRange, filter, neigborCountLimit);
 	}
 
