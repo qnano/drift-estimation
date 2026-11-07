@@ -1,50 +1,38 @@
 from setuptools import setup
-from setuptools import Distribution
 
-long_description= """
-SMLM Drift estimation library, see publication:
+long_description = """
+SMLM drift estimation by entropy minimization (DME), GPU implementation in PyTorch.
 
-Jelmer Cnossen, Tao Ju Cui, Chirlmin Joo, and Carlas Smith, 
-"Drift correction in localization microscopy using entropy minimization," 
+Jelmer Cnossen, Tao Ju Cui, Chirlmin Joo, and Carlas Smith,
+"Drift correction in localization microscopy using entropy minimization,"
 Opt. Express 29, 27961-27974 (2021)
 https://opg.optica.org/oe/fulltext.cfm?uri=oe-29-18-27961&id=457245
 """
 
-# Tested with wheel v0.29.0
-class BinaryDistribution(Distribution):
-    """Distribution which always forces a binary package with platform name"""
-    def has_ext_modules(foo):
-        return True
-
 setup(
     name="dme",
-    version="1.0",
+    version="2.0.0",
     author="Jelmer Cnossen",
     author_email="j.cnossen@gmail.com",
-    description="SMLM Drift Estimation using the DME algorithm",
+    description="SMLM drift estimation using the DME algorithm",
     long_description=long_description,
- #   long_description_content_type="text/markdown",
-#    url="https",
-#    platforms=['nt'],
+    url="https://github.com/qnano/drift-estimation",
     classifiers=[
         "Programming Language :: Python :: 3",
-		"Programming Language :: C++",
-	    "License :: OSI Approved :: MIT License",
-        "Operating System :: Microsoft :: Windows"
+        "License :: OSI Approved :: MIT License",
     ],
     packages=['dme'],
     include_package_data=True,
+    # prebuilt binaries of the original C++/CUDA implementation (dme.legacy), if present
     package_data={"dme": [
         "bin/release/dme_cpu.dll",
         "bin/release/dme_cuda.dll",
         "bin/release/msvcp140.dll",
         "bin/release/libdme_cuda.so"]},
-    install_requires=[
-		'numpy',
-		'matplotlib',
-		'tqdm',
-        'scipy'
-	]
-    #distclass=BinaryDistribution
+    python_requires='>=3.8',
+    install_requires=['numpy', 'scipy', 'matplotlib', 'tqdm', 'torch'],
+    extras_require={
+        # fused pair kernels for method='v1' (pick the cupy build matching your CUDA driver)
+        'cupy': ['cupy-cuda12x'],
+    },
 )
-

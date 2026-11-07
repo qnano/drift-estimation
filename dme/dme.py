@@ -1,200 +1,150 @@
-# -*- coding: utf-8 -*-
+"""
+Drift estimation by entropy minimization (DME), GPU implementation in PyTorch (+ optional CuPy kernels).
+
+    from dme import dme_estimate
+    drift, (drift_set1, drift_set2) = dme_estimate(positions, framenum, crlb, framesperbin=500)
+
+method='v2' (default): density-grid evaluation of the DME objective, multi-start initialization (AIM, RCC, zero;
+                       the best by DME score), coarse-to-fine kernel
+                       widths and preconditioned L-BFGS.
+method='v1':           the algorithm of the paper (Cnossen et al., Opt. Express 2021): exact pairwise objective,
+                       RCC initialization, optional coarse pass. The neighbor search uses a GPU spatial hash instead
+                       of the original CPU KD-tree, and optimization uses L-BFGS.
+The original C++/CUDA implementation is still available as dme.legacy.dme_estimate (needs a compiled library).
+"""
+import time
+import warnings
 import numpy as np
-import matplotlib.pyplot as plt
-import tqdm
-import os
-from .native_api import NativeAPI
 
-from .rcc import rcc, rcc3D
-        
-def dme_estimate(positions, framenum, crlb, framesperbin, imgshape, 
-          coarseFramesPerBin=None,
-          coarseSigma=None, 
-          perSpotCRLB=False,
-          useCuda=False,
-          display=True, # make a plot
-          pixelsize=None,
-          maxspots=None, 
-          initializeWithRCC=10, 
-          initialEstimate=None, 
-          rccZoom=2,
-          estimatePrecision=True,
-          maxNeighbors=1000,
-          maxIterations=2000,
-          coarseMaxIterations=1000,
-          useDebugLibrary=False,
-          numframes=None,
-          traces=None):
+from .dme_gpu import default_device
+
+_IGNORED_LEGACY_ARGS = ('useCuda', 'maxNeighbors', 'useDebugLibrary', 'traces')
+
+
+def dme_estimate(positions, framenum, crlb, framesperbin, imgshape=None,
+                 method='v2',
+                 perSpotCRLB=False,
+                 initializeWithRCC=10,
+                 initialEstimate=None,
+                 rccZoom=2,
+                 coarseFramesPerBin=None,
+                 coarseSigma=None,
+                 estimatePrecision=True,
+                 maxIterations=200,
+                 coarseMaxIterations=100,
+                 maxspots=None,
+                 numframes=None,
+                 display=False,
+                 pixelsize=None,
+                 device=None,
+                 verbose=True,
+                 **legacy_kwargs):
     """
-    Estimate drift using minimum entropy method. Parameters:
+    Estimate drift by entropy minimization.
 
-    Required parameters: 
-        
-    positions: a N by K sized numpy array with all the positions, with N being the number of localizations and K the number of dimensions
-    framenum: a integer numpy array of frame numbers corresponding to each localization in positions
-    crlb: an N by K sized numpy array with uncertainty of positions (cramer rao lower bound from the localization code)
-    framesperbin: Number of frames per spline point. Either 1 to disable spline interpolation, or >= 4 to enable cubic splines.
-    imgshape: Field of view size [height, width]. Only used for computing the initial 2D estimate using RCC 
-        
-    Optional parameters:
+    positions:     [N, D] localizations (D = 2 or 3), e.g. x, y in pixels and z in microns
+    framenum:      [N] integer frame numbers
+    crlb:          [N, D] localization precision (CRLB), same units as positions, or a constant [D] vector
+    framesperbin:  frames per spline knot (1 = drift per frame, otherwise cubic Catmull-Rom spline)
+    imgshape:      ignored (kept for compatibility with the original API)
 
-    initializeWithRCC: If not None, perform RCC with 10 bins to compute an initial estimate. Pass 
-    estimatePrecision: Split the dataset in two, and estimate drift on both. The difference gives an indication of estimation precision.
-    display: Generate a matplotlib plot with results
-    coarseFramesPerBin / coarseSigma: If not None, do a coarse initialization to prevent a local minimum. 
-            coarseSigma sets an alternative 'CRLB' to smooth the optimziation landscape (typically make it 4x larger).
-    pixelsize: Size of pixels in nm. If display=True, it will convert the units in the plot to nm
-    maxspots: If not None, it will select the brightess spots to use and ignore the rest. Useful for large datasets > 1M spots
-    initialEstimate: Initial drift estimate, replaces RCC initialization
-    maxNeighbors: Limit the number of neighbors a single spot can have. 
-    
-    Return value:
-        
-    If estimatePrecision is True:
-        The estimated drift of full dataset, a tuple with drifts of split dataset
-    Else
-        The estimated drift as numpy array
-    
+    method:        'v2' (default) or 'v1' (algorithm of the paper, see module docstring)
+    perSpotCRLB:   use per-localization CRLBs in the objective ('v1' only; 'v2' uses the mean CRLB)
+    initializeWithRCC: number of RCC time bins for the initial estimate ('v1'; 'v2' tries AIM, RCC and zero
+                   drift and continues with the one with the best DME score)
+    initialEstimate: [F, D] initial drift, replaces RCC / AIM initialization
+    coarseFramesPerBin, coarseSigma: optional coarse pass before the fine one ('v1'; 'v2' is always coarse-to-fine)
+    estimatePrecision: also estimate drift on two halves of the data (split along x or y); the RMSD between the two
+                   traces indicates the precision
+    maxIterations: L-BFGS function evaluations per optimization
+    maxspots:      if set, use only the maxspots localizations with the best (smallest) CRLB
+    numframes:     number of frames (default: max(framenum) + 1)
+    display:       plot the result with matplotlib
+    pixelsize:     nm per pixel, for the plot title
+    device:        torch device, default 'cuda' if available, else 'cpu'
+
+    Returns drift [F, D] (corrected positions = positions - drift[framenum]), and if estimatePrecision is True
+    also (drift_set1, drift_set2).
     """
-    ndims = positions.shape[1]
-    
-    if numframes is None:
-        numframes = np.max(framenum)+1
+    for k in legacy_kwargs:
+        if k not in _IGNORED_LEGACY_ARGS:
+            raise TypeError(f"dme_estimate() got an unexpected keyword argument '{k}'")
+    if legacy_kwargs and verbose:
+        print(f"dme_estimate: ignoring arguments of the C++ implementation: {', '.join(legacy_kwargs)}")
 
-    initial_drift = np.zeros((numframes,ndims))
-    
-    with NativeAPI(useCuda, debugMode=useDebugLibrary) as dll:
+    positions = np.ascontiguousarray(positions, dtype=np.float32)
+    framenum = np.ascontiguousarray(framenum, dtype=np.int32)
+    D = positions.shape[1]
+    crlb = np.asarray(crlb, dtype=np.float32)
+    if crlb.ndim == 1:
+        crlb = np.broadcast_to(crlb[:D], positions.shape)
+    crlb = np.ascontiguousarray(crlb[:, :D])
+    F = int(numframes if numframes is not None else framenum.max() + 1)
+    device = default_device(device)
 
-        if initialEstimate is not None:
-            initial_drift = np.ascontiguousarray(initialEstimate,dtype=np.float32)
-            assert initial_drift.shape[1] == ndims
-            
-        elif initializeWithRCC:
-            if type(initializeWithRCC) == bool:
-                initializeWithRCC = 10
-    
-            posI = np.ones((len(positions),positions.shape[1]+1)) 
-            posI[:,:-1] = positions
-    
-            if positions.shape[1] == 3:
-                initial_drift = rcc3D(posI, framenum, initializeWithRCC, dll=dll, zoom=rccZoom)
-            else:
-                initial_drift = rcc(posI, framenum ,initializeWithRCC, dll=dll, zoom=rccZoom)[0]
-            
-    
-            
-        if maxspots is not None and maxspots < len(positions):
-            print(f"Drift correction: Limiting spot count to {maxspots}/{len(positions)} spots.")
-            bestspots = np.argsort(np.prod(crlb,1))
-            indices = bestspots[-maxspots:]
-            crlb = crlb[indices]
-            positions = positions[indices]
-            framenum = framenum[indices]
-        
-        if not perSpotCRLB:
-            crlb = np.mean(crlb,0)[:ndims]
-            
-        step = 0.000001
+    if maxspots is not None and maxspots < len(positions):
+        best = np.sort(np.argsort(np.prod(crlb, 1))[:maxspots])
+        if verbose:
+            print(f"dme_estimate: using the {maxspots}/{len(positions)} localizations with the smallest CRLB")
+        positions, framenum, crlb = positions[best], framenum[best], crlb[best]
 
-        splitAxis = np.argmax( np.var(positions[:,:2],0) ) # only in X or Y
-        splitValue = np.median(positions[:,splitAxis])
-        
-        set1 = positions[:,splitAxis] > splitValue
-        set2 = np.logical_not(set1)
-        
+    init = None if initialEstimate is None else np.asarray(initialEstimate, np.float32)[:F]
+    t0 = time.time()
+
+    if method == 'v2':
+        from .dme_grid import dme_grid_estimate
         if perSpotCRLB:
-            print("Using drift correction with per-spot CRLB")
-            crlb_set1 = crlb[set1]
-            crlb_set2 = crlb[set2]
-        else:
-            crlb_set1 = crlb
-            crlb_set2 = crlb
-                            
-        maxdrift=0 # ignored at the moment
-        if coarseFramesPerBin is not None:
-            
-            assert len(coarseSigma) == positions.shape[1]
-            
-            print(f"Computing initial coarse drift estimate... ({coarseFramesPerBin} frames/bin)",flush=True)
-            with tqdm.tqdm() as pbar:
-                def update_pbar(i,info,drift_est): 
-                    pbar.set_description(info); pbar.update(1)
-                    if traces is not None:
-                        traces.append(drift_est.copy())
-                    return 1
-    
-                initial_drift,score = dll.MinEntropyDriftEstimate(
-                    positions, framenum, initial_drift*1, coarseSigma, coarseMaxIterations, step, maxdrift, 
-                    framesPerBin=coarseFramesPerBin, cuda=useCuda,progcb=update_pbar)
-                
-        print(f"\nEstimating drift... ({framesperbin} frames/bin)",flush=True)
-        with tqdm.tqdm() as pbar:
-            def update_pbar(i,info,drift_est): 
-                pbar.set_description(info);pbar.update(1)
-                if traces is not None:
-                    traces.append(drift_est.copy())
-                return 1
-            update_pbar(0,'',initial_drift*1)
-            drift,score = dll.MinEntropyDriftEstimate(
-                positions, framenum, initial_drift*1, crlb, maxIterations, step, maxdrift, framesPerBin=framesperbin, maxneighbors=maxNeighbors,
-                cuda=useCuda, progcb=update_pbar)
-                
-        if estimatePrecision:
-            print(f"\nComputing drift estimation precision... (Splitting axis={splitAxis})",flush=True)
-            with tqdm.tqdm() as pbar:
-                def update_pbar(i,info,drift_est): 
-                    pbar.set_description(info);pbar.update(1)
-                    return 1
-                drift_set1,score_set1 = dll.MinEntropyDriftEstimate(
-                    positions[set1], framenum[set1], initial_drift*1, crlb_set1, maxIterations, step, maxdrift, 
-                    framesPerBin=framesperbin,cuda=useCuda, progcb=update_pbar)
-    
-                drift_set2,score_set2 = dll.MinEntropyDriftEstimate(
-                    positions[set2], framenum[set2], initial_drift*1, crlb_set2, maxIterations, step, maxdrift, 
-                    framesPerBin=framesperbin,cuda=useCuda,progcb=update_pbar)
-    
-        drift -= np.mean(drift,0)
+            warnings.warn("method='v2' uses the mean CRLB; use method='v1' for per-spot CRLB")
+        r = dme_grid_estimate(positions, framenum, crlb.mean(0), framesperbin,
+                              init='auto' if init is None else init,
+                              maxIterations=maxIterations, estimatePrecision=estimatePrecision,
+                              numframes=F, device=device, verbose=verbose)
+    elif method == 'v1':
+        from .dme_pipeline import dme_estimate_gpu
+        r = dme_estimate_gpu(positions, framenum, crlb, framesperbin,
+                             coarseFramesPerBin=coarseFramesPerBin, coarseSigma=coarseSigma,
+                             perSpotCRLB=perSpotCRLB, initializeWithRCC=initializeWithRCC, initialEstimate=init,
+                             rccZoom=rccZoom, estimatePrecision=estimatePrecision, maxIterations=maxIterations,
+                             coarseMaxIterations=coarseMaxIterations, numframes=F, device=device, verbose=verbose)
+    else:
+        raise ValueError(f"method must be 'v2' or 'v1', got {method!r}")
 
-        if estimatePrecision:
-            drift_set1 -= np.mean(drift_set1,0)
-            drift_set2 -= np.mean(drift_set2,0)
+    if verbose:
+        print(f"dme_estimate (method={method}, device={device}): {time.time() - t0:.1f}s", flush=True)
 
-            L = min(len(drift_set1),len(drift_set2))
-            diff = drift_set1[:L] - drift_set2[:L]
-            rmsd = np.sqrt( (diff**2).mean(0) )
-            print(f"\nRMSD of drift traces on split dataset: {rmsd}",flush=True)
-
-        if display:
-            L=len(drift)
-            fig,ax=plt.subplots(ndims,1,sharex=True,figsize=(10,8),dpi=100)
-            
-            axnames = ['X', 'Y', 'Z']
-            axunits = ['px', 'px', 'um']
-            for i in range(ndims):
-                axname=axnames[i]
-                axunit = axunits[i]
-                if estimatePrecision:
-                    ax[i].plot(drift_set1[:L,i], '--', label=f'{axname} - set1')
-                    ax[i].plot(drift_set2[:L,i], '--', label=f'{axname} - set2')
-                ax[i].plot(drift[:L,i], label=f'{axname} - full')
-                ax[i].plot(initial_drift[:L,i], label=f'Initial value {axname}')
-                ax[i].set_ylabel(f'Drift {axname} [{axunit}]')
-                ax[i].set_xlabel('Frame number')
-                if i==0: ax[i].legend(fontsize=12)
-            
-            if estimatePrecision:
-                if pixelsize is not None:
-                    p=rmsd
-                    scale = [pixelsize, pixelsize, 1000]
-                    info = ';'.join([ f'{axnames[i]}: {p[i]*scale[i]:.1f} nm ({p[i]:.3f} {axunits[i]})' for i in range(ndims)])
-                    
-                    plt.suptitle(f'Drift trace. RMSD: {info}')
-                else:
-                    plt.suptitle(f'Drift trace. RMSD: X/Y={rmsd[1]:.3f}/{rmsd[1]:.3f} pixels')
-
-        if estimatePrecision:
-            return drift, (drift_set1, drift_set2)
-                                
-        return drift
+    if estimatePrecision:
+        drift, (d1, d2) = r
+    else:
+        drift, d1, d2 = r, None, None
+    if display:
+        plot_drift(drift, d1, d2, pixelsize)
+    return (drift, (d1, d2)) if estimatePrecision else drift
 
 
+def precision(drift_set1, drift_set2):
+    """RMSD between the drift traces of the two halves of the data (per dimension)."""
+    a = drift_set1 - drift_set1.mean(0)
+    b = drift_set2 - drift_set2.mean(0)
+    return np.sqrt(((a - b) ** 2).mean(0))
+
+
+def plot_drift(drift, drift_set1=None, drift_set2=None, pixelsize=None):
+    import matplotlib.pyplot as plt
+    D = drift.shape[1]
+    names, units = ['X', 'Y', 'Z'], ['px', 'px', 'um']
+    fig, ax = plt.subplots(D, 1, sharex=True, figsize=(8, 2.2 * D))
+    for i in range(D):
+        if drift_set1 is not None:
+            ax[i].plot(drift_set1[:, i], '--', lw=0.8, label='set 1')
+            ax[i].plot(drift_set2[:, i], '--', lw=0.8, label='set 2')
+        ax[i].plot(drift[:, i], 'k', lw=1, label='full')
+        ax[i].set_ylabel(f'{names[i]} [{units[i]}]')
+    ax[0].legend(fontsize=8)
+    ax[-1].set_xlabel('Frame')
+    if drift_set1 is not None:
+        p = precision(drift_set1, drift_set2)
+        sc = [pixelsize or 1, pixelsize or 1, 1000]
+        u = ['nm' if pixelsize else 'px', 'nm' if pixelsize else 'px', 'nm']
+        fig.suptitle('Split-half RMSD: ' + ', '.join(f'{names[i]} {p[i] * sc[i]:.3g} {u[i]}' for i in range(D)))
+    fig.tight_layout()
+    return fig

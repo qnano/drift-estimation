@@ -1,46 +1,27 @@
-# -*- coding: utf-8 -*-
 """
-How to process localization data from Picasso, stored in HDF5 format.
-
-Photonpy is required for this (but no CUDA is required for the HDF5 loader):
-    
-    pip install photonpy=1.0.39
-
+Drift correction of localization data stored in Picasso HDF5 format (needs h5py).
+Writes a drift-corrected copy next to the input file.
 """
-
 import os
-from photonpy import Dataset
-from dme.dme import dme_estimate
-import matplotlib.pyplot as plt
+import h5py
+import numpy as np
+from dme import dme_estimate
 
 fn = 'example_data/gattaquant 80nm RY.hdf5'
-ds = Dataset.load(fn)
-print(ds) # prints number of localizations
+with h5py.File(fn, 'r') as f:
+    locs = f['locs'][:]
+print(f"{len(locs)} localizations")
 
-drift_trace, (set1,set2)  = dme_estimate(ds.pos, ds.frame, ds.crlb.pos,
-             framesperbin = 10,
-             imgshape=ds.imgshape,  # size of field of view in pixels (same units as ds.pos)
-             useCuda=True,
-             maxspots=500000, 
-             pixelsize=108.3,
-             display=True)
+pos = np.stack([locs['x'], locs['y']], 1)
+crlb = np.stack([locs['lpx'], locs['lpy']], 1)
 
-"""
-# Already using 'display=True' above
+drift, (set1, set2) = dme_estimate(pos, locs['frame'], crlb, framesperbin=10,
+                                   pixelsize=108.3, display=True)
 
-fig,ax=plt.subplots(2,1,figsize=(8,6),sharex=True)
-for i in range(2):
-    ax[i].plot(drift_trace[:,i], label='Estimated drift')
-    if i==0:
-        ax[i].legend()
-        
-    axname=['X', 'Y'][i]
-    ax[i].set_title(f'{axname} drift')
-    ax[i].set_ylabel('Drift [pixels]')
-ax[1].set_xlabel('Frame')
-plt.tight_layout()
-"""
-
-ds.applyDrift(drift_trace)
-
-ds.save(os.path.splitext(fn)[0]+"-drift-corrected.hdf5")
+corrected = locs.copy()
+corrected['x'] -= drift[locs['frame'], 0]
+corrected['y'] -= drift[locs['frame'], 1]
+out = os.path.splitext(fn)[0] + '-drift-corrected.hdf5'
+with h5py.File(out, 'w') as f:
+    f.create_dataset('locs', data=corrected)
+print(f"Saved {out} (copy the .yaml file from the input to open it in Picasso)")
