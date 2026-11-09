@@ -2,7 +2,7 @@
 Figures and tables from benchmark/results (see compare_methods.py).
 
     python benchmark/compare_plots.py              # docs/method_comparison.png (README), docs/method_overview.png
-    python benchmark/compare_plots.py --markdown   # also print the tables used in docs/COMPARISON.md
+    python benchmark/compare_plots.py --markdown   # also print the tables used in docs/comparison.md
 """
 import os, json, collections
 import numpy as np
@@ -260,7 +260,7 @@ def overview(S, D, meta, methods, out, RR=None):
 
 
 def markdown(S, D, RR):
-    """Tables for docs/COMPARISON.md."""
+    """Tables for docs/comparison.md."""
     names = [('dme_v2', 'DME v2'), ('comet', 'COMET'), ('dme2021x', 'DME 2021'), ('aim', 'AIM'), ('rcc', 'RCC'),
              ('dme_v2_fixed', 'DME v2, fixed bins')]
     sizes = sorted({n for m in S.values() for n in m}, key=float)

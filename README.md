@@ -10,7 +10,7 @@ J. Cnossen, T. J. Cui, C. Joo, C. Smith, "Drift correction in localization micro
 maximizes the same entropy objective as the paper, and adds a small learned temporal prior: instead of a spline with a
 user-chosen number of frames per knot, it measures the drift of short time segments with the DME objective and turns
 these measurements into a drift trace with a trained 1D network. It chooses the temporal resolution itself, so it has
-no settings to tune. How it works: [docs/METHOD.md](docs/METHOD.md).
+no settings to tune. How it works: [docs/method.md](docs/method.md).
 
 ![comparison](docs/method_comparison.png)
 
@@ -18,7 +18,7 @@ On simulated DNA-PAINT data DME v2 is 1.6–2.1× more precise than COMET, the n
 than AIM, RCC and the 2021 DME code, although each of those was run at its best settings, picked with the true drift
 (DME v2 has no settings). On a real DNA-PAINT nanoruler (the dataset in `example_data/`) it is also the most precise.
 It is slower than AIM and RCC: 3 s for 10k localizations, 20 s for 1M, 3 minutes for 10M on an RTX 3090.
-Details, tables and the settings searched: [docs/COMPARISON.md](docs/COMPARISON.md).
+Details, tables and the settings searched: [docs/comparison.md](docs/comparison.md).
 
 Installation
 ------------
@@ -59,7 +59,7 @@ Repository
 |---|---|
 | `dme/` | the package: `dme_estimate`; `dme_prior.py` learned prior; `dme_grid.py` density-grid DME; `dme_pipeline.py` v1 and RCC; `aim_torch.py` AIM |
 | `dme/weights/` | weights of the learned temporal prior |
-| `docs/` | [METHOD.md](docs/METHOD.md), [COMPARISON.md](docs/COMPARISON.md), figures |
+| `docs/` | [method.md](docs/method.md), [comparison.md](docs/comparison.md), figures |
 | `benchmark/` | the comparison: scripts and results |
 | `training/` | training of the temporal prior (synthetic data only) |
 | `tests/` | `python -m pytest tests` |

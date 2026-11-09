@@ -1,5 +1,5 @@
 """
-Comparison of drift estimation methods (results in benchmark/results, overview in docs/COMPARISON.md).
+Comparison of drift estimation methods (results in benchmark/results, overview in docs/comparison.md).
 
 Methods
   dme_v2        DME v2 with the learned temporal prior: dme_estimate(..., framesperbin=None). No settings.
