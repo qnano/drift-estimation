@@ -179,7 +179,7 @@ class DMEGrid:
         return flat0[:, None] + offs[None], w
 
     def _splat_blur_interp(self, B, gshape, m_idx, m_w, m_pt, o_idx, o_w, o_pt, weights_list, kinds_list, outs):
-        gcells = int(np.prod(gshape))
+        gcells = int(math.prod(gshape))
         for wi, (wt, kinds) in enumerate(zip(weights_list, kinds_list)):
             g = torch.zeros(B * gcells, device=self.dev)
             src = m_w if m_pt is None else m_w
@@ -204,15 +204,15 @@ class DMEGrid:
         ext = torch.ceil(c.max(0).values).long() + H + 2
         outs = [torch.empty(self.N, len(k), device=self.dev) for k in kinds_list]
         extl = ext.tolist()
-        if float(np.prod(extl)) <= self.max_tile_cells:
+        if float(math.prod(extl)) <= self.max_tile_cells:
             # single grid, no tiling bookkeeping
             gshape = extl
-            gmult = torch.tensor([int(np.prod(gshape[d + 1:])) for d in range(D)], device=self.dev)
+            gmult = torch.tensor([int(math.prod(gshape[d + 1:])) for d in range(D)], device=self.dev)
             idx, w = self._corners(c, None, 0, gmult)
             self._splat_blur_interp(1, gshape, idx, w, None, idx, w, None, weights_list, kinds_list, outs)
             return outs
         # banded along axis 0: sort by c0 once; each band's members (band + halo) and owners are contiguous slices
-        other = int(np.prod(extl[1:]))
+        other = int(math.prod(extl[1:]))
         T = max(self.max_tile_cells // other - 2 * H, 2 * H)
         order = torch.argsort(c[:, 0])
         cs = c[order]
@@ -224,7 +224,7 @@ class DMEGrid:
         o_lo = torch.searchsorted(c0, edges[:-1]).tolist()
         o_hi = torch.searchsorted(c0, edges[1:]).tolist()
         gshape = [T + 2 * H] + extl[1:]
-        gmult = torch.tensor([int(np.prod(gshape[d + 1:])) for d in range(D)], device=self.dev)
+        gmult = torch.tensor([int(math.prod(gshape[d + 1:])) for d in range(D)], device=self.dev)
         wsorted = [w[order] for w in weights_list]
         souts = [torch.empty(self.N, len(k), device=self.dev) for k in kinds_list]
         for bi in range(nb):
@@ -376,9 +376,9 @@ def choose_backend(positions, sigma, h=0.5, r=3.0, device='cuda'):
     cells_grid = float(torch.prod(ext / h + 2 * 10))
     c = torch.floor((u - u.min(0).values) / r).long() + 1
     dims = (c.max(0).values + 2).tolist()
-    mult = [int(np.prod(dims[:d])) for d in range(D)]
+    mult = [int(math.prod(dims[:d])) for d in range(D)]
     key = (c * torch.tensor(mult, device=device)).sum(1)
-    cnt = torch.bincount(key, minlength=int(np.prod(dims)))
+    cnt = torch.bincount(key, minlength=int(math.prod(dims)))
     nb = torch.zeros_like(key, dtype=torch.float32)
     for o in itertools.product([-1, 0, 1], repeat=D):
         nb += cnt[key + sum(o[d] * mult[d] for d in range(D))].float()

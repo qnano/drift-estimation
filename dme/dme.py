@@ -2,11 +2,13 @@
 Drift estimation by entropy minimization (DME), GPU implementation in PyTorch (+ optional CuPy kernels).
 
     from dme import dme_estimate
-    drift, (drift_set1, drift_set2) = dme_estimate(positions, framenum, crlb, framesperbin=500)
+    drift, (drift_set1, drift_set2) = dme_estimate(positions, framenum, crlb)
 
 method='v2' (default): density-grid evaluation of the DME objective, multi-start initialization (AIM, RCC, zero;
-                       the best by DME score), coarse-to-fine kernel
-                       widths and preconditioned L-BFGS.
+                       the best by DME score), coarse-to-fine kernel widths and preconditioned L-BFGS.
+                       framesperbin=None (default): the temporal resolution is chosen from the data and the drift
+                       trace comes from a small learned temporal prior applied to per-segment DME measurements
+                       (dme/dme_prior.py). With a given framesperbin: a cubic spline with that knot spacing.
 method='v1':           the algorithm of the paper (Cnossen et al., Opt. Express 2021): exact pairwise objective,
                        RCC initialization, optional coarse pass. The neighbor search uses a GPU spatial hash instead
                        of the original CPU KD-tree, and optimization uses L-BFGS.
@@ -21,7 +23,7 @@ from .dme_gpu import default_device
 _IGNORED_LEGACY_ARGS = ('useCuda', 'maxNeighbors', 'useDebugLibrary', 'traces')
 
 
-def dme_estimate(positions, framenum, crlb, framesperbin, imgshape=None,
+def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
                  method='v2',
                  perSpotCRLB=False,
                  initializeWithRCC=10,
@@ -45,10 +47,12 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape=None,
     positions:     [N, D] localizations (D = 2 or 3), e.g. x, y in pixels and z in microns
     framenum:      [N] integer frame numbers
     crlb:          [N, D] localization precision (CRLB), same units as positions, or a constant [D] vector
-    framesperbin:  frames per spline knot (1 = drift per frame, otherwise cubic Catmull-Rom spline)
+    framesperbin:  frames per spline knot (1 = drift per frame, otherwise cubic Catmull-Rom spline). Required for
+                   'v1'. For 'v2', None (default) chooses the temporal resolution automatically and uses the
+                   learned temporal prior (most precise; slower)
     imgshape:      ignored (kept for compatibility with the original API)
 
-    method:        'v2' (default) or 'v1' (algorithm of the paper, see module docstring)
+    method:        'v2' (default) or 'v1' (algorithm of the paper), see the module docstring
     perSpotCRLB:   use per-localization CRLBs in the objective ('v1' only; 'v2' uses the mean CRLB)
     initializeWithRCC: number of RCC time bins for the initial estimate ('v1'; 'v2' tries AIM, RCC and zero
                    drift and continues with the one with the best DME score)
@@ -89,12 +93,27 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape=None,
         positions, framenum, crlb = positions[best], framenum[best], crlb[best]
 
     init = None if initialEstimate is None else np.asarray(initialEstimate, np.float32)[:F]
+    if method == 'v1' and framesperbin is None:
+        raise TypeError("method='v1' needs framesperbin")
+    if method == 'v2' and perSpotCRLB:
+        warnings.warn("method='v2' uses the mean CRLB; use method='v1' for per-spot CRLB")
     t0 = time.time()
 
-    if method == 'v2':
+    if method == 'v2' and framesperbin is None:
+        from .dme_prior import dme_prior_estimate
+        if init is not None:
+            warnings.warn("initialEstimate is ignored when framesperbin is None")
+        est = lambda p, f, c, vb: dme_prior_estimate(p, f, c, numframes=F, device=device, verbose=vb)
+        drift_all = est(positions, framenum, crlb, verbose)
+        if estimatePrecision:
+            ax = int(np.argmax(np.var(positions[:, :2], 0)))
+            s1 = positions[:, ax] > np.median(positions[:, ax])
+            r = drift_all, (est(positions[s1], framenum[s1], crlb[s1], False),
+                            est(positions[~s1], framenum[~s1], crlb[~s1], False))
+        else:
+            r = drift_all
+    elif method == 'v2':
         from .dme_grid import dme_grid_estimate
-        if perSpotCRLB:
-            warnings.warn("method='v2' uses the mean CRLB; use method='v1' for per-spot CRLB")
         r = dme_grid_estimate(positions, framenum, crlb.mean(0), framesperbin,
                               init='auto' if init is None else init,
                               maxIterations=maxIterations, estimatePrecision=estimatePrecision,
@@ -107,7 +126,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape=None,
                              rccZoom=rccZoom, estimatePrecision=estimatePrecision, maxIterations=maxIterations,
                              coarseMaxIterations=coarseMaxIterations, numframes=F, device=device, verbose=verbose)
     else:
-        raise ValueError(f"method must be 'v2' or 'v1', got {method!r}")
+        raise ValueError(f"method must be 'v1' or 'v2', got {method!r}")
 
     if verbose:
         print(f"dme_estimate (method={method}, device={device}): {time.time() - t0:.1f}s", flush=True)

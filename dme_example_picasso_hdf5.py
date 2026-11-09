@@ -15,8 +15,7 @@ print(f"{len(locs)} localizations")
 pos = np.stack([locs['x'], locs['y']], 1)
 crlb = np.stack([locs['lpx'], locs['lpy']], 1)
 
-drift, (set1, set2) = dme_estimate(pos, locs['frame'], crlb, framesperbin=10,
-                                   pixelsize=108.3, display=True)
+drift, (set1, set2) = dme_estimate(pos, locs['frame'], crlb, pixelsize=108.3, display=True)
 
 corrected = locs.copy()
 corrected['x'] -= drift[locs['frame'], 0]

@@ -31,9 +31,9 @@ localizations, framenum = smlm_simulation(drift_trace, fov_width, loc_error, n_s
 crlb = np.tile(loc_error, (len(localizations), 1)).astype(np.float32)
 print(f"Total localizations: {len(localizations)}")
 
-# DME v2 (default)
-drift, (set1, set2) = dme_estimate(localizations, framenum, crlb, framesperbin=20)
-# Algorithm of the paper (exact pairwise objective, RCC init), still on the GPU
+# DME v2 (default): chooses the temporal resolution itself, learned temporal prior
+drift, (set1, set2) = dme_estimate(localizations, framenum, crlb)
+# Algorithm of the 2021 paper (exact pairwise objective, RCC start) with a spline knot every 20 frames
 drift_v1 = dme_estimate(localizations, framenum, crlb, framesperbin=20, method='v1', estimatePrecision=False)
 
 for name, d in [('v2', drift), ('v1', drift_v1)]:

@@ -25,6 +25,7 @@ setup(
     include_package_data=True,
     # prebuilt binaries of the original C++/CUDA implementation (dme.legacy), if present
     package_data={"dme": [
+        "weights/temporal_prior.pt",   # learned temporal prior of method='v2'
         "bin/release/dme_cpu.dll",
         "bin/release/dme_cuda.dll",
         "bin/release/msvcp140.dll",

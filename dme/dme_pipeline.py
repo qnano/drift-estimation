@@ -54,7 +54,7 @@ def rcc_torch(xy, framenum, timebins=10, zoom=2, sigma=1.0, maxdrift_px=None, nu
     b = ((fr + 0.5) / fpb).long().clamp(max=timebins - 1)
     lo = xy.min(0).values
     p = (xy - lo) * zoom
-    W, H = [int(v) + 2 for v in p.max(0).values.tolist()]
+    W, H = [max(int(v) + 2, 16) for v in p.max(0).values.tolist()]   # >= 16 px: room for the peak search
     Hf, Wf = H + H % 2, W + W % 2
     Fimg = _render_bins(p, b, timebins, (Hf, Wf), sigma, dev)
     i, j = torch.triu_indices(timebins, timebins, 1, device=dev)

@@ -44,7 +44,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
     coarseFramesPerBin / coarseSigma: If not None, do a coarse initialization to prevent a local minimum. 
             coarseSigma sets an alternative 'CRLB' to smooth the optimziation landscape (typically make it 4x larger).
     pixelsize: Size of pixels in nm. If display=True, it will convert the units in the plot to nm
-    maxspots: If not None, it will select the brightess spots to use and ignore the rest. Useful for large datasets > 1M spots
+    maxspots: If not None, only the maxspots localizations with the smallest CRLB (brightest) are used. Useful for large datasets > 1M spots
     initialEstimate: Initial drift estimate, replaces RCC initialization
     maxNeighbors: Limit the number of neighbors a single spot can have. 
     
@@ -85,8 +85,8 @@ def dme_estimate(positions, framenum, crlb, framesperbin, imgshape,
             
         if maxspots is not None and maxspots < len(positions):
             print(f"Drift correction: Limiting spot count to {maxspots}/{len(positions)} spots.")
-            bestspots = np.argsort(np.prod(crlb,1))
-            indices = bestspots[-maxspots:]
+            bestspots = np.argsort(np.prod(crlb,1))   # ascending CRLB: most precise first
+            indices = bestspots[:maxspots]
             crlb = crlb[indices]
             positions = positions[indices]
             framenum = framenum[indices]

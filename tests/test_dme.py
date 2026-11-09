@@ -24,11 +24,11 @@ def rmsd(d, gt):
 
 
 @pytest.mark.parametrize('device', DEVICES)
-@pytest.mark.parametrize('method', ['v2', 'v1'])
+@pytest.mark.parametrize('method,fpb', [('v2', None), ('v2', 20), ('v1', 20)])
 @pytest.mark.parametrize('D', [2, 3])
-def test_simulation(device, method, D):
+def test_simulation(device, method, fpb, D):
     pos, fr, crlb, gt = simulate(D)
-    drift, (d1, d2) = dme_estimate(pos, fr, crlb, framesperbin=20, method=method, device=device, verbose=False)
+    drift, (d1, d2) = dme_estimate(pos, fr, crlb, framesperbin=fpb, method=method, device=device, verbose=False)
     assert drift.shape == gt.shape
     assert (rmsd(drift, gt) < 0.05).all(), rmsd(drift, gt)
     assert (rmsd(d1, gt) < 0.08).all() and (rmsd(d2, gt) < 0.08).all()
