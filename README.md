@@ -60,7 +60,7 @@ MATLAB
 PyTorch and this package:
 
 ```matlab
-pyenv('Version', 'C:\path	o\env\python.exe', 'ExecutionMode', 'OutOfProcess')
+pyenv('Version', 'C:\path\to\env\python.exe', 'ExecutionMode', 'OutOfProcess')
 addpath('matlab')
 [drift, set1, set2] = dme_estimate_v2(positions, framenum, crlb);      % framenum starts at 0
 corrected = positions - drift(framenum + 1, :);
