@@ -83,7 +83,7 @@ def rcc_torch(xy, framenum, timebins=10, zoom=2, sigma=1.0, maxdrift_px=None, nu
 
 
 def rcc3d_torch(xyz, framenum, timebins=10, zoom=2, sigma=1.0, numframes=None, device='cuda'):
-    """XY by RCC; Z by RCC on a sheared projection (y + z), as in dme.rcc.rcc3D."""
+    """XY by RCC; Z by RCC on a sheared projection (y + z), as in rcc3D of the 2021 code."""
     xyz = np.asarray(xyz)
     dxy = rcc_torch(xyz[:, :2], framenum, timebins, zoom, sigma, numframes=numframes, device=device)
     sh = xyz[:, :2] - dxy[framenum]

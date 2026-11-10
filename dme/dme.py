@@ -12,7 +12,8 @@ method='v2' (default): density-grid evaluation of the DME objective, multi-start
 method='v1':           the algorithm of the paper (Cnossen et al., Opt. Express 2021): exact pairwise objective,
                        RCC initialization, optional coarse pass. The neighbor search uses a GPU spatial hash instead
                        of the original CPU KD-tree, and optimization uses L-BFGS.
-The original C++/CUDA implementation is still available as dme.legacy.dme_estimate (needs a compiled library).
+The original C++/CUDA implementation of the paper is in the repository history (github.com/qnano/drift-estimation,
+commit 2ee39f7).
 """
 import time
 import warnings

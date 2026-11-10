@@ -23,15 +23,9 @@ setup(
     ],
     packages=['dme'],
     include_package_data=True,
-    # prebuilt binaries of the original C++/CUDA implementation (dme.legacy), if present
-    package_data={"dme": [
-        "weights/temporal_prior.pt",   # learned temporal prior of method='v2'
-        "bin/release/dme_cpu.dll",
-        "bin/release/dme_cuda.dll",
-        "bin/release/msvcp140.dll",
-        "bin/release/libdme_cuda.so"]},
+    package_data={"dme": ["weights/temporal_prior.pt"]},   # learned temporal prior of method='v2' 
     python_requires='>=3.8',
-    install_requires=['numpy', 'scipy', 'matplotlib', 'tqdm', 'torch'],
+    install_requires=['numpy', 'scipy', 'matplotlib', 'torch'],
     extras_require={
         # fused pair kernels for method='v1' (pick the cupy build matching your CUDA driver)
         'cupy': ['cupy-cuda12x'],

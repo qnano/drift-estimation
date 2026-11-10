@@ -120,7 +120,6 @@ difference between the two traces (`dme.precision`) indicates the precision.
 
 - `method='v1'`: the algorithm of the 2021 paper (exact pairwise objective with per-localization CRLBs, RCC start,
   optional coarse pass), with the neighbour search on the GPU (spatial hash) instead of a CPU KD-tree, and L-BFGS.
-- `dme.legacy.dme_estimate`: the original C++/CUDA code (needs the compiled library).
 - `dme.aim` and `dme.rcc_torch`: PyTorch implementations of AIM (Ma et al., Sci. Adv. 2024) and redundant
   cross-correlation (Wang et al. 2014), used as starting points and in the comparison.
 

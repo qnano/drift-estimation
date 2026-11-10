@@ -85,13 +85,13 @@ Repository
 | `training/` | training of the temporal prior (synthetic data only) |
 | `tests/` | `python -m pytest tests` |
 | `matlab/` | `dme_estimate.m`: DME from MATLAB (calls the Python package) |
-| `dme/DME`, `dme/legacy.py`, `CMakeLists.txt` | the original 2021 C++/CUDA implementation and its Python wrapper |
 
 Original C++/CUDA version
 -------------------------
 
-The 2021 implementation is still available as `dme.legacy.dme_estimate`, for reproducing the paper and the comparison.
-It needs the compiled library: run `build_windows.bat` on Windows, or `cmake . && make` on Linux with CUDA installed.
-Known problems of that code, absent in the PyTorch versions: its neighbor list is not updated often enough, so it
-can stop before reaching the optimum, and above a few million localizations an integer overflow makes it return zero
-drift. Its `maxspots` option kept the least precise localizations instead of the most precise; this is fixed.
+The 2021 C++/CUDA implementation and its MATLAB wrapper are no longer part of the package; everything is PyTorch
+now. They remain available at commit [2ee39f7](https://github.com/qnano/drift-estimation/tree/2ee39f7), which is
+the code of the paper. `dme_estimate` still accepts the arguments of the old Python API (and ignores the ones that only
+applied to the C++ code). Known problems of that code, absent in this version: its neighbor list is not updated often
+enough, so it can stop before reaching the optimum; above a few million localizations an integer overflow makes it
+return zero drift; and its `maxspots` option kept the least precise localizations instead of the most precise.

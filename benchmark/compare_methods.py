@@ -4,7 +4,7 @@ Comparison of drift estimation methods (results in benchmark/results, overview i
 Methods
   dme_v2        DME v2 with the learned temporal prior: dme_estimate(..., framesperbin=None). No settings.
   dme_v2_fixed  DME v2 with fixed bins: dme_estimate(..., framesperbin=fpb). Also the reference for real data.
-  dme2021       the original C++/CUDA code of the 2021 paper (dme.legacy), single stage
+  dme2021       the original C++/CUDA code of the 2021 paper, single stage (needs DME2021_PATH, see legacy_dme)
   dme2021_c2f   the same code run coarse to fine: 100k most precise localizations at 4x kernel width and 4x
                 longer bins, then 300k at 2x, then the final setting on at most 1M localizations
   comet         COMET (Reinkensmeier et al., bioRxiv 2026; pip install comet-smlm)
@@ -25,7 +25,7 @@ DME 2021 uses at most the 1M most precise localizations. COMET: at most 2000 tim
     python benchmark/compare_methods.py --part real        # writes benchmark/results/real.json
     python benchmark/compare_plots.py                       # figures in docs/
 """
-import os, json, time, argparse, contextlib, io
+import os, sys, json, time, argparse, contextlib, io
 import numpy as np
 import torch
 
@@ -106,8 +106,25 @@ def run_comet(p, f, c, F, s, px):
     return np.asarray(d)[:F, :2] / px
 
 
+def legacy_dme():
+    """dme_estimate of the original C++/CUDA code of the 2021 paper. It is not part of this package anymore: check out
+    github.com/qnano/drift-estimation at commit 2ee39f7, build the library as described in its README, and set the
+    environment variable DME2021_PATH to that checkout. Loaded as the package 'dme2021' to avoid a name clash."""
+    import importlib, importlib.util
+    if 'dme2021' not in sys.modules:
+        root = os.environ.get('DME2021_PATH')
+        if not root:
+            raise RuntimeError('DME 2021: set DME2021_PATH to a built checkout of qnano/drift-estimation commit 2ee39f7')
+        pkg = os.path.join(root, 'dme')
+        spec = importlib.util.spec_from_file_location('dme2021', os.path.join(pkg, '__init__.py'),
+                                                      submodule_search_locations=[pkg])
+        sys.modules['dme2021'] = mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    return importlib.import_module('dme2021.dme').dme_estimate
+
+
 def run_dme2021(p, f, c, F, s, px):
-    from dme.legacy import dme_estimate as legacy
+    legacy = legacy_dme()
     fpb, perspot, rccbins = (list(s) + [10])[:3]
     if len(p) > MAXSPOTS:
         p, f, c = most_precise(p, f, c, MAXSPOTS)
@@ -119,7 +136,7 @@ C2F_STAGES = ((100_000, 4), (300_000, 2), (MAXSPOTS, 1))   # (max localizations,
 
 
 def run_dme2021_c2f(p, f, c, F, s, px):
-    from dme.legacy import dme_estimate as legacy
+    legacy = legacy_dme()
     fpb, perspot, rccbins = (list(s) + [20])[:3]
     order = np.argsort(np.prod(c, 1), kind='stable')
     d = None

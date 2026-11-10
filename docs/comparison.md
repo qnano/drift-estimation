@@ -12,7 +12,7 @@ raw results are in [`benchmark/`](../benchmark); all runs on one NVIDIA RTX 3090
 |---|---|---|---|
 | **DME v2** | `dme_estimate(...)` (this package) | none: chooses its temporal resolution itself | |
 | DME v2, fixed bins | `dme_estimate(..., framesperbin=...)` | bins 10–2000 frames | |
-| DME 2021 | `dme.legacy` (original C++/CUDA code) | bins 20–2000 frames; RCC start with 10 or 20 bins; single stage, or coarse to fine (100k localizations at 4× kernel and 4× longer bins → 300k at 2× → final) | at most the 1M most precise localizations |
+| DME 2021 | original C++/CUDA code, [qnano/drift-estimation@2ee39f7](https://github.com/qnano/drift-estimation/tree/2ee39f7) | bins 20–2000 frames; RCC start with 10 or 20 bins; single stage, or coarse to fine (100k localizations at 4× kernel and 4× longer bins → 300k at 2× → final) | at most the 1M most precise localizations |
 | COMET | `comet-smlm` 1.2.0 (Reinkensmeier et al., bioRxiv 2026), numba-cuda backend | windows 10–2000 frames at 10 nm final kernel, then 1, 5, 20 nm at the best window | max. drift 300 nm (default); real data: ≤ 2000 windows |
 | AIM | PyTorch port of AIM (Ma et al., Sci. Adv. 2024) in `dme.aim` | bins 10–2000 frames × intersection distance 5–30 nm | |
 | RCC | PyTorch/GPU redundant cross-correlation (Wang et al. 2014) in `dme.rcc_torch` | bins 100–2000 frames × render zoom 1, 2, 4 | zoom 4 does not fit in 24 GB GPU memory at 3M–10M localizations |
@@ -88,7 +88,8 @@ this limitation.
 ## Reproducing
 
 ```
-pip install comet-smlm                                # for COMET; DME 2021 needs the compiled library (README)
+pip install comet-smlm                                # for COMET
+# for DME 2021: build the 2021 code (checkout of commit 2ee39f7, see its README) and set DME2021_PATH to it
 python benchmark/compare_methods.py --part sim        # ~10 h on an RTX 3090 (most of it DME 2021 and COMET)
 python benchmark/compare_methods.py --part real       # ~1 h
 python benchmark/compare_plots.py --markdown          # figures in docs/, tables as above
