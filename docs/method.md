@@ -62,10 +62,19 @@ A spline with a fixed knot spacing forces the user to trade noise (short bins) a
    that segment alone (all other localizations act as reference). This gives a Newton measurement of the segment's
    drift, z<sub>t</sub> = d<sub>t</sub> + (−H<sub>t</sub>)<sup>−1</sup> g<sub>t</sub> (limited to 1.5σ), with
    information J<sub>t</sub> = −N H<sub>t</sub>. Segments without a positive-definite curvature are marked invalid.
-2. **Smooths** with a network. A fully convolutional 1D network (20 dilated residual blocks, 64 channels, ~0.33M
-   parameters; axes processed independently) takes the measurements, their standard deviations from J<sub>t</sub> and a
-   validity flag, plus robust noise-scale estimates at lags 1, 2, 4 and 8 segments, and estimates the measurement
-   noise; the drift is z − noise. It works for any number of segments and any field of view.
+2. **Smooths** with a network, one axis at a time:
+   - *input*, per segment *t*: the measurement z<sub>t</sub>, its standard deviation s<sub>t</sub> (from
+     J<sub>t</sub><sup>−1</sup>) and a validity flag. Invalid segments get z interpolated from their neighbours and a
+     30× larger s. The network sees scale-free features: the step z<sub>t</sub> − z<sub>t−1</sub> and log s<sub>t</sub>,
+     both relative to the median s, the validity flag, and four robust estimates of the actual noise level (from second
+     differences at lags 1, 2, 4 and 8 segments; these reveal a miscalibrated s);
+   - *output*: the noise of each measurement in units of s<sub>t</sub>, *e<sub>t</sub>*. The drift of segment *t* is
+     z<sub>t</sub> − e<sub>t</sub> s<sub>t</sub>, and the drift per frame is the linear interpolation between segment
+     centres.
+
+   The network is fully convolutional (20 dilated residual blocks, 64 channels, ~0.33M parameters, receptive field
+   ~4000 segments), so it works for any number of segments, and it never sees the localizations themselves, so it does
+   not depend on the sample or the field of view.
 3. **Repeats** steps 1–2 at kernel widths 4σ, 2σ, 1σ, 1σ, 1σ, starting from the DME fixed-spline estimate.
 
 The segment length *L* (6–192 frames, at least 30 localizations per segment and 24 segments) and the bin length of the
@@ -80,6 +89,21 @@ broad generator (polynomials, slow sinusoids, random walks, vibrations, steps, G
 oscillations, piecewise-linear) plus measurement noise with a random per-segment scale, 0.5–3× miscalibration, AR(1)
 correlation up to 0.85 (multi-frame binding events make neighbouring segments correlated), outliers and missing
 segments. No experimental data and none of the benchmark simulations are used for training.
+
+**Why a generic, learned prior.** Any smoothing of noisy drift measurements is a prior. A smoothing spline is the
+posterior mean under one particular Gaussian-process prior [1, 2], so choosing `framesperbin` is choosing how fast the
+drift is assumed to change, and no single choice suits both slow thermal drift and a sudden step. Work on plug-and-play
+priors and regularization by denoising has shown that the prior can be separated from the measurement model and
+supplied by a generic denoiser [3, 4]. Here the physics stays in the DME measurements (z<sub>t</sub>,
+J<sub>t</sub>) and the network only does the temporal denoising. A denoiser trained to minimize the squared error
+estimates the posterior mean under the distribution it was trained on (Tweedie's formula [5]; a trained denoiser
+contains a usable prior [6]). Trained on a deliberately broad drift generator, it therefore acts as a mixture of many
+drift models and adapts its effective smoothing to each trace. Giving the network the per-segment noise level follows
+noise-level-conditioned denoisers [7]. Training only on simulations amortizes Bayesian inference [8, 9], and
+networks trained only on synthetic time series transfer to real ones [10]. Networks trained on simulated data are also
+established in localization microscopy itself [11, 12]. The weak point is coverage: the prior is only as good as the
+generator. Hence the broad generator with miscalibrated, correlated and missing measurements, and the cross-fit, which
+keeps the plain spline as a candidate and so rejects the prior on held-out binding sites when it does not help.
 
 **3D data.** The learned prior never builds a 3D grid: imaging is 2D, so in 3D the localizations are spread thinly
 in z and a 3D grid would be mostly empty (billions of cells for a 200 × 200 px field of view). Instead, the x, y drift
@@ -108,3 +132,30 @@ difference between the two traces (`dme.precision`) indicates the precision.
 - In 3D, the z drift comes from the x–z projection, where localizations at different y overlap; this is less
   precise than a full 3D evaluation would be for very dense samples.
 - One CRLB per axis (see section 2).
+
+## References
+
+1. G. S. Kimeldorf, G. Wahba, "A correspondence between Bayesian estimation on stochastic processes and smoothing by
+   splines", Ann. Math. Statist. 41, 495 (1970). [doi:10.1214/aoms/1177697089](https://doi.org/10.1214/aoms/1177697089)
+2. G. Wahba, "Improper priors, spline smoothing and the problem of guarding against model errors in regression",
+   J. R. Stat. Soc. B 40, 364 (1978). [doi:10.1111/j.2517-6161.1978.tb01050.x](https://doi.org/10.1111/j.2517-6161.1978.tb01050.x)
+3. S. V. Venkatakrishnan, C. A. Bouman, B. Wohlberg, "Plug-and-play priors for model based reconstruction",
+   IEEE GlobalSIP, 945 (2013). [doi:10.1109/GlobalSIP.2013.6737048](https://doi.org/10.1109/GlobalSIP.2013.6737048)
+4. Y. Romano, M. Elad, P. Milanfar, "The little engine that could: regularization by denoising (RED)",
+   SIAM J. Imaging Sci. 10, 1804 (2017). [doi:10.1137/16M1102884](https://doi.org/10.1137/16M1102884)
+5. B. Efron, "Tweedie's formula and selection bias", J. Am. Stat. Assoc. 106, 1602 (2011).
+   [doi:10.1198/jasa.2011.tm11181](https://doi.org/10.1198/jasa.2011.tm11181)
+6. Z. Kadkhodaie, E. P. Simoncelli, "Stochastic solutions for linear inverse problems using the prior implicit in a
+   denoiser", NeurIPS 34 (2021). [arXiv:2007.13640](https://arxiv.org/abs/2007.13640)
+7. K. Zhang, W. Zuo, L. Zhang, "FFDNet: toward a fast and flexible solution for CNN-based image denoising",
+   IEEE Trans. Image Process. 27, 4608 (2018). [doi:10.1109/TIP.2018.2839891](https://doi.org/10.1109/TIP.2018.2839891)
+8. K. Cranmer, J. Brehmer, G. Louppe, "The frontier of simulation-based inference", PNAS 117, 30055 (2020).
+   [doi:10.1073/pnas.1912789117](https://doi.org/10.1073/pnas.1912789117)
+9. S. Müller, N. Hollmann, S. Pineda Arango, J. Grabocka, F. Hutter, "Transformers can do Bayesian inference",
+   ICLR (2022). [arXiv:2112.10510](https://arxiv.org/abs/2112.10510)
+10. S. Dooley, G. S. Khurana, C. Mohapatra, S. Naidu, C. White, "ForecastPFN: synthetically-trained zero-shot
+    forecasting", NeurIPS (2023). [arXiv:2311.01933](https://arxiv.org/abs/2311.01933)
+11. E. Nehme, L. E. Weiss, T. Michaeli, Y. Shechtman, "Deep-STORM: super-resolution single-molecule microscopy by deep
+    learning", Optica 5, 458 (2018). [doi:10.1364/OPTICA.5.000458](https://doi.org/10.1364/OPTICA.5.000458)
+12. A. Speiser et al., "Deep learning enables fast and dense single-molecule localization with high accuracy",
+    Nat. Methods 18, 1082 (2021). [doi:10.1038/s41592-021-01236-x](https://doi.org/10.1038/s41592-021-01236-x)
