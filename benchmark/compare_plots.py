@@ -261,8 +261,7 @@ def overview(S, D, meta, methods, out, RR=None):
 
 def markdown(S, D, RR):
     """Tables for docs/comparison.md."""
-    names = [('dme_v2', 'DME v2'), ('comet', 'COMET'), ('dme2021x', 'DME 2021'), ('aim', 'AIM'), ('rcc', 'RCC'),
-             ('dme_v2_fixed', 'DME v2, fixed bins')]
+    names = [('dme_v2', 'DME v2'), ('comet', 'COMET'), ('dme2021x', 'DME 2021'), ('aim', 'AIM'), ('rcc', 'RCC')]
     sizes = sorted({n for m in S.values() for n in m}, key=float)
     lab = lambda n: {1e4: '10k', 3e4: '30k', 1e5: '100k', 3e5: '300k', 1e6: '1M', 3e6: '3M', 1e7: '10M'}[float(n)]
     ts = lambda t: f'{t:.2f}' if t < 1 else (f'{t:.1f}' if t < 10 else f'{t:.0f}')

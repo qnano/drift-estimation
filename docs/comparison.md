@@ -11,7 +11,6 @@ raw results are in [`benchmark/`](../benchmark); all runs on one NVIDIA RTX 3090
 | method | implementation | settings searched | limits |
 |---|---|---|---|
 | **DME v2** | `dme_estimate(...)` (this package) | none: chooses its temporal resolution itself | |
-| DME v2, fixed bins | `dme_estimate(..., framesperbin=...)` | bins 10–2000 frames | |
 | DME 2021 | original C++/CUDA code, [qnano/drift-estimation@2ee39f7](https://github.com/qnano/drift-estimation/tree/2ee39f7) | bins 20–2000 frames; RCC start with 10 or 20 bins; single stage, or coarse to fine (100k localizations at 4× kernel and 4× longer bins → 300k at 2× → final) | at most the 1M most precise localizations |
 | COMET | `comet-smlm` 1.2.0 (Reinkensmeier et al., bioRxiv 2026), numba-cuda backend | windows 10–2000 frames at 10 nm final kernel, then 1, 5, 20 nm at the best window | max. drift 300 nm (default); real data: ≤ 2000 windows |
 | AIM | PyTorch port of AIM (Ma et al., Sci. Adv. 2024) in `dme.aim` | bins 10–2000 frames × intersection distance 5–30 nm | |
@@ -43,7 +42,6 @@ setting per dataset is picked with the true drift, an advantage no user has.
 | DME 2021 | 1.01 · 5.4 | 0.64 · 7.9 | 0.43 · 12 | 0.29 · 22 | 0.18 · 31 | 0.11 · 65 | 0.13 · 118 |
 | AIM | 1.00 · 0.04 | 0.64 · 0.05 | 0.42 · 0.08 | 0.27 · 0.11 | 0.19 · 0.17 | 0.12 · 0.30 | 0.075 · 0.61 |
 | RCC | 1.12 · 0.02 | 0.75 · 0.15 | 0.47 · 0.47 | 0.31 · 1.5 | 0.24 · 5.5 | 0.34 · 3.8 | 0.60 · 2.8 |
-| DME v2, fixed bins | 1.02 · 0.20 | 0.65 · 0.23 | 0.44 · 0.24 | 0.30 · 0.28 | 0.18 · 0.62 | 0.088 · 1.0 | 0.079 · 3.4 |
 
 **Default settings**: drift error (nm) · runtime (s)
 
@@ -57,9 +55,9 @@ setting per dataset is picked with the true drift, an advantage no user has.
 
 - DME v2 is 1.6–2.1× more precise than COMET at every size, 2.2–3.4× more precise than AIM, 2.2–5× more precise
   than DME 2021 and 2.5–23× more precise than RCC.
-- Run coarse to fine, DME 2021 is as precise as DME v2 with fixed bins (it optimizes the same objective) and 3× faster
-  than in a single stage at 1M localizations; above 1M it is limited by the 1M-localization subset.
-- AIM is by far the fastest, and with tuned settings about as precise as DME v2 with fixed bins.
+- Run coarse to fine, DME 2021 is 3× faster than in a single stage at 1M localizations; above 1M it is limited by the
+  1M-localization subset.
+- AIM is by far the fastest, and with tuned settings about as precise as DME 2021.
 - With default settings, the bin length of AIM, RCC and DME 2021 is wrong for most dataset sizes: errors of 9–67 nm on
   small datasets. COMET's README settings hold up well (about 1.5× its tuned error).
 
@@ -68,21 +66,20 @@ setting per dataset is picked with the true drift, an advantage no user has.
 The GATTAquant 80 nm DNA-PAINT nanoruler in `example_data/` (638k localizations, 5000 frames, 108.3 nm pixels). There
 is no true drift, so the error is measured by a held-out comparison: the localizations are split into two halves by an
 8×8 spatial checkerboard (different binding sites, same drift); a method's drift from one half is compared with a fine
-reference (DME v2 with fixed bins of 10 and 20 frames) from the other half, and the reference's own noise, estimated
+reference (the DME objective with a fixed spline of 10 and 20 frames per knot) from the other half, and the reference's own noise, estimated
 from the difference between its two halves, is subtracted. The best setting of each method is picked by this error,
 and then timed on all localizations.
 
 | method | best settings (nm) | default settings (nm) | runtime, best (s) | best setting |
 |---|---|---|---|---|
 | **DME v2** | **0.73** | – | 7.7 | – |
-| DME v2, fixed bins | 0.81 | 1.21 | 0.45 | 20 frames per bin |
 | DME 2021 | 0.83 | 2.15 | 40 | coarse to fine, 50 frames per bin |
 | COMET | 0.95 | 0.95 | 103 | 60-frame windows, 5 nm |
 | AIM | 1.27 | 2.19 | 0.07 | 100 frames per bin, 0.1 px |
 | RCC | 1.66 | 2.35 | 0.12 | 200 frames per bin, zoom 4 |
 
-The ranking is the same as in the simulations, with smaller margins. Because the reference is itself DME with fixed
-bins, this metric may favour the DME-based methods somewhat; the simulations, which use the true drift, do not have
+The ranking is the same as in the simulations, with smaller margins. Because the reference is itself DME-based, this
+metric may favour the DME-based methods somewhat; the simulations, which use the true drift, do not have
 this limitation.
 
 ## Reproducing

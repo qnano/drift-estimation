@@ -9,8 +9,13 @@ J. Cnossen, T. J. Cui, C. Joo, C. Smith, "Drift correction in localization micro
 **DME v2 (2026)** is a rewrite in PyTorch: no compilation, runs on any CUDA GPU (Linux, Windows) or on the CPU. It
 maximizes the same entropy objective as the paper, and adds a small learned temporal prior: instead of a spline with a
 user-chosen number of frames per knot, it measures the drift of short time segments with the DME objective and turns
-these measurements into a drift trace with a trained 1D network. It chooses the temporal resolution itself, so it has
-no settings to tune. How it works: [docs/method.md](docs/method.md).
+these measurements into a drift trace with a trained 1D network.
+
+**No frames per bin to choose.** Every other method, including the 2021 DME code, needs the temporal resolution
+(frames per bin or window) set by hand. Too short and the drift estimate is noisy; too long and fast drift is smoothed
+away, and the best value depends on the dataset (see the default-settings results in
+[docs/comparison.md](docs/comparison.md)). DME v2 chooses it from the data itself, so there are no settings to tune.
+How it works: [docs/method.md](docs/method.md).
 
 ![comparison](docs/method_comparison.png)
 
@@ -41,9 +46,8 @@ drift, (drift_set1, drift_set2) = dme_estimate(positions, framenum, crlb)
 corrected = positions - drift[framenum]
 ```
 
-- `dme_estimate(positions, framenum, crlb)`: DME v2, temporal resolution chosen automatically, learned prior.
-- `framesperbin=100`: DME v2 with a fixed cubic spline (one knot per 100 frames), no learned prior. Much faster
-  (0.2–3 s), but you choose the temporal resolution.
+- `dme_estimate(positions, framenum, crlb)`: DME v2. The temporal resolution is chosen automatically; there is no
+  `framesperbin` to set.
 - `method='v1', framesperbin=100`: the algorithm of the 2021 paper (exact pairwise objective, RCC start), on the GPU.
   Supports per-localization CRLBs (`perSpotCRLB=True`).
 - `drift_set1`/`drift_set2` are estimates from two halves of the data; `dme.precision(drift_set1, drift_set2)` gives
@@ -70,7 +74,7 @@ addpath('matlab')
 corrected = positions - drift(framenum + 1, :);
 ```
 
-Options: `'FramesPerBin'` (fixed bins), `'Method', 'v1'`, `'EstimatePrecision'`, `'Device'`. Example:
+Options: `'Method', 'v1'` with `'FramesPerBin'` (the 2021 algorithm), `'EstimatePrecision'`, `'Device'`. Example:
 [dme_example.m](dme_example.m).
 
 Repository

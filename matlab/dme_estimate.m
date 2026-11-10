@@ -2,7 +2,7 @@ function [drift, drift_set1, drift_set2] = dme_estimate(positions, framenum, crl
 %DME_ESTIMATE  Drift estimation with DME v2, through the Python package (needs MATLAB R2022a or newer).
 %
 %   [drift, set1, set2] = dme_estimate(positions, framenum, crlb)
-%   [drift, set1, set2] = dme_estimate(..., 'FramesPerBin', 100, 'Method', 'v1', ...)
+%   [drift, set1, set2] = dme_estimate(..., 'Method', 'v1', 'FramesPerBin', 100)     % algorithm of the 2021 paper
 %
 %   positions : N x 2 or N x 3 localizations (e.g. x, y in pixels, z in microns)
 %   framenum  : N x 1 frame numbers, starting at 0
@@ -13,8 +13,8 @@ function [drift, drift_set1, drift_set2] = dme_estimate(positions, framenum, crl
 %               rms(set1 - set2) indicates the precision.
 %
 %   Options (name-value):
-%     'FramesPerBin'      []: DME v2 chooses the temporal resolution and uses the learned temporal prior (default).
-%                         A number: cubic spline with one knot per FramesPerBin frames (needed for 'v1').
+%     'FramesPerBin'      only for 'v1': cubic spline with one knot per FramesPerBin frames. DME v2 (default)
+%                         chooses the temporal resolution itself.
 %     'Method'            'v2' (default) or 'v1' (algorithm of the 2021 paper)
 %     'EstimatePrecision' true (default) / false
 %     'NumFrames'         number of frames (default max(framenum) + 1)

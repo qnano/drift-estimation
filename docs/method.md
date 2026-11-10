@@ -49,13 +49,13 @@ tests; they remain available in `method='v1'`.
   objective and avoids local optima.
 - **L-BFGS** preconditioned with the per-knot 2×2 (3×3 in 3D) block Hessian of the objective.
 
-With a fixed `framesperbin`, the drift is a cubic Catmull-Rom spline with one knot per `framesperbin` frames and this
-is the result (`dme_estimate(..., framesperbin=...)`).
+Here the drift is a cubic Catmull-Rom spline with one knot per bin of frames. This fixed-spline estimate is only the
+starting point of DME v2 (section 4).
 
-## 4. Learned temporal prior (default)
+## 4. Learned temporal prior
 
-A spline with a fixed knot spacing forces the user to trade noise (short bins) against bias (long bins). Without
-`framesperbin`, DME v2 instead:
+A spline with a fixed knot spacing forces the user to trade noise (short bins) against bias (long bins), and the right
+bin length depends on the dataset. DME v2 has no such setting; instead it:
 
 1. **Measures** short segments. Time is cut into segments of *L* frames. At the current drift estimate, the DME
    objective gives for every segment the gradient *g<sub>t</sub>* and curvature *H<sub>t</sub>* with respect to shifting
@@ -126,7 +126,7 @@ difference between the two traces (`dme.precision`) indicates the precision.
 ## 7. Limitations
 
 - The learned prior costs time: 3 s for 10k localizations, 20 s for 1M, about 3 minutes for 10M on an RTX 3090 (the
-  cross-fit runs several candidates on both halves). With a fixed `framesperbin` it takes 0.2–3 s.
+  cross-fit runs several candidates on both halves).
 - It needs at least 24 segments; for very short recordings it falls back to the fixed spline.
 - In 3D, the z drift comes from the x–z projection, where localizations at different y overlap; this is less
   precise than a full 3D evaluation would be for very dense samples.
