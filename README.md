@@ -49,26 +49,29 @@ corrected = positions - drift[framenum]
 - `drift_set1`/`drift_set2` are estimates from two halves of the data; `dme.precision(drift_set1, drift_set2)` gives
   their RMS difference as an indication of the precision. Disable with `estimatePrecision=False`.
 
-Examples: [dme_example.py](dme_example.py) (3D simulation), [dme_example_picasso_hdf5.py](dme_example_picasso_hdf5.py)
-(Picasso HDF5 file), [Google Colab](https://colab.research.google.com/github/qnano/drift-estimation/blob/master/dme_example_colab.ipynb).
+Examples:
+- [dme_example.py](dme_example.py): 3D simulation with known drift, DME v2 and v1.
+- [dme_example_picasso_hdf5.py](dme_example_picasso_hdf5.py): drift correction of a Picasso HDF5 file (the nanoruler in
+  `example_data/`), writes a corrected file that opens in Picasso. Needs `h5py`.
+- [dme_example_colab.ipynb](dme_example_colab.ipynb): notebook with both
+  ([open in Google Colab](https://colab.research.google.com/github/qnano/drift-estimation/blob/master/dme_example_colab.ipynb)).
 
 MATLAB
 ------
 
-[matlab/dme_estimate_v2.m](matlab/dme_estimate_v2.m) calls the Python package through MATLAB's Python interface
+[matlab/dme_estimate.m](matlab/dme_estimate.m) calls the Python package through MATLAB's Python interface
 (R2022a or newer), so MATLAB gets exactly the same DME v2, on the GPU. Point MATLAB once to a Python environment with
 PyTorch and this package:
 
 ```matlab
 pyenv('Version', 'C:\path\to\env\python.exe', 'ExecutionMode', 'OutOfProcess')
 addpath('matlab')
-[drift, set1, set2] = dme_estimate_v2(positions, framenum, crlb);      % framenum starts at 0
+[drift, set1, set2] = dme_estimate(positions, framenum, crlb);      % framenum starts at 0
 corrected = positions - drift(framenum + 1, :);
 ```
 
 Options: `'FramesPerBin'` (fixed bins), `'Method', 'v1'`, `'EstimatePrecision'`, `'Device'`. Example:
-[dme_example_v2.m](dme_example_v2.m). The original MATLAB wrapper of the 2021 C++/CUDA code is still in `matlab/`
-(`dme_estimate.m`, [dme_example.m](dme_example.m)).
+[dme_example.m](dme_example.m).
 
 Repository
 ----------
@@ -81,13 +84,13 @@ Repository
 | `benchmark/` | the comparison: scripts and results |
 | `training/` | training of the temporal prior (synthetic data only) |
 | `tests/` | `python -m pytest tests` |
-| `matlab/` | `dme_estimate_v2.m` (DME v2 from MATLAB); the other files wrap the 2021 C++/CUDA code |
-| `dme/DME`, `CMakeLists.txt` | the original 2021 C++/CUDA implementation |
+| `matlab/` | `dme_estimate.m`: DME from MATLAB (calls the Python package) |
+| `dme/DME`, `dme/legacy.py`, `CMakeLists.txt` | the original 2021 C++/CUDA implementation and its Python wrapper |
 
 Original C++/CUDA version
 -------------------------
 
-The 2021 implementation is still available as `dme.legacy.dme_estimate` (and its MATLAB wrapper `matlab/dme_estimate.m`).
+The 2021 implementation is still available as `dme.legacy.dme_estimate`, for reproducing the paper and the comparison.
 It needs the compiled library: run `build_windows.bat` on Windows, or `cmake . && make` on Linux with CUDA installed.
 Known problems of that code, absent in the PyTorch versions: its neighbor list is not updated often enough, so it
 can stop before reaching the optimum, and above a few million localizations an integer overflow makes it return zero
