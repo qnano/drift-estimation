@@ -41,6 +41,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
                  pixelsize=None,
                  device=None,
                  verbose=True,
+                 isotropic3d=False,
                  **legacy_kwargs):
     """
     Estimate drift by entropy minimization.
@@ -67,6 +68,9 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
     display:       plot the result with matplotlib
     pixelsize:     nm per pixel, for the plot title
     device:        torch device, default 'cuda' if available, else 'cpu'
+    isotropic3d:   3D data, 'v2' without framesperbin: evaluate the objective in 3D (3D grid or spatial hash, whichever
+                   is cheaper) instead of on the x-y and x-z projections. Only worth it for very dense 3D samples where
+                   binding sites at different depths overlap in projection; much slower.
 
     Returns drift [F, D] (corrected positions = positions - drift[framenum]), and if estimatePrecision is True
     also (drift_set1, drift_set2).
@@ -104,7 +108,8 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
         from .dme_prior import dme_prior_estimate
         if init is not None:
             warnings.warn("initialEstimate is ignored when framesperbin is None")
-        est = lambda p, f, c, vb: dme_prior_estimate(p, f, c, numframes=F, device=device, verbose=vb)
+        est = lambda p, f, c, vb: dme_prior_estimate(p, f, c, numframes=F, device=device, verbose=vb,
+                                                      isotropic3d=isotropic3d)
         drift_all = est(positions, framenum, crlb, verbose)
         if estimatePrecision:
             ax = int(np.argmax(np.var(positions[:, :2], 0)))

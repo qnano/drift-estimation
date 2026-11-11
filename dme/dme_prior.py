@@ -19,6 +19,7 @@ smoother:
 
 The network weights are in dme/weights/temporal_prior.pt. Uses the mean of the given CRLBs.
 """
+import itertools
 import math
 import os
 import numpy as np
@@ -26,7 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as Fn
 
-from .dme_grid import DMEGrid, dme_grid_estimate
+from .dme_grid import DMEGrid, dme_grid_estimate, choose_backend
 
 WEIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'weights', 'temporal_prior.pt')
 LAGS = (1, 2, 4, 8)
@@ -118,10 +119,111 @@ def _min_max_eig(M):
     return torch.cat(lo), torch.cat(hi)
 
 
-def seg_measurements(pos, fr, sig, F, d_frames, L, device, trust=1.5):
+@torch.no_grad()
+def _pair_sums(u, fr, R, w=None, need_hess=False, budget=1 << 23):
+    """Spatial hash sums over other-frame neighbours j of each point i, |d| < R with d = u_i - u_j, K = exp(-|d|^2/2):
+    S0_i = sum w_j K, S1_i = sum w_j dK/du_i = -sum w_j K d, and (need_hess) S2_i = sum K (d d^T - I).
+    Points are sorted by cell, the 3^D neighbour cells are found with searchsorted, and query points are processed in
+    chunks of bounded candidate count, so memory is O(N + budget) however many pairs there are."""
+    N, D = u.shape
+    dev = u.device
+    cell = torch.floor((u - u.min(0).values) / R).long() + 1
+    dims = (cell.max(0).values + 2).tolist()
+    mult = [int(math.prod(dims[:d])) for d in range(D)]
+    key = (cell * torch.tensor(mult, device=dev)).sum(1)
+    skey, order = torch.sort(key)
+    okeys = [sum(o[d] * mult[d] for d in range(D)) for o in itertools.product([-1, 0, 1], repeat=D)]
+    S0 = torch.zeros(N, device=dev)
+    S1 = torch.zeros(N, D, device=dev)
+    S2 = torch.zeros(N, D, D, device=dev) if need_hess else None
+    eye = torch.eye(D, device=dev)
+    start, chunk = 0, min(N, 4096)
+    while start < N:
+        end = min(N, start + chunk)
+        qi, qk = order[start:end], skey[start:end]
+        total = 0
+        for ok in okeys:
+            lo = torch.searchsorted(skey, qk + ok, side='left')
+            cnt = torch.searchsorted(skey, qk + ok, side='right') - lo
+            tot = int(cnt.sum())
+            if tot == 0:
+                continue
+            total += tot
+            a = torch.repeat_interleave(torch.arange(end - start, device=dev), cnt)
+            j = order[torch.repeat_interleave(lo - (cnt.cumsum(0) - cnt), cnt) + torch.arange(tot, device=dev)]
+            i = qi[a]
+            d = u[i] - u[j]
+            d2 = (d * d).sum(1)
+            m = (d2 < R * R) & (fr[i] != fr[j])
+            i, j, d, d2 = i[m], j[m], d[m], d2[m]
+            K = torch.exp(-0.5 * d2)
+            if need_hess:
+                S2.index_add_(0, i, (d[:, :, None] * d[:, None, :] - eye) * K[:, None, None])
+            if w is not None:
+                K = K * w[j]
+            S0.index_add_(0, i, K)
+            S1.index_add_(0, i, -d * K[:, None])
+        chunk = int(max(256, min(1 << 20, budget * (end - start) / max(total, 1))))
+        start = end
+    return S0, S1, S2
+
+
+class DMEPairs:
+    """Exact DME objective (spatial hash, no grid) with one drift value per frame, and the same score_and_grad
+    interface as DMEGrid(framesperbin=1). Used where a grid would be large and mostly empty, e.g. 3D data with a
+    z range of many CRLBs."""
+
+    def __init__(self, positions, framenum, crlb, initial_drift, numframes, device='cuda', kernel_radius=4.0):
+        dev = torch.device(device)
+        self.scale = torch.as_tensor(np.asarray(crlb, np.float32), device=dev)
+        self.v = torch.as_tensor(np.asarray(positions, np.float32), device=dev) / self.scale
+        self.fr = torch.as_tensor(np.asarray(framenum), dtype=torch.long, device=dev)
+        self.N, self.D = self.v.shape
+        self.F = int(numframes)
+        self.state = torch.as_tensor(np.asarray(initial_drift, np.float32)[:self.F], device=dev) / self.scale
+        self.R = kernel_radius
+
+    @torch.no_grad()
+    def score_and_grad(self, state, need_grad=True, need_hess=False):
+        u = self.v - state[self.fr]
+        S0, gG, Hg = _pair_sums(u, self.fr, self.R, need_hess=need_hess)
+        Z = 1.0 + S0
+        score = torch.log(Z.double()).mean().float()
+        if not need_grad:
+            return score, None
+        norm = 1.0 / Z
+        _, Gw, _ = _pair_sums(u, self.fr, self.R, w=norm)      # other-end term: sum_j norm_j dK(u_i - u_j)/du_i
+        dSdu = norm[:, None] * gG + Gw
+        grad = torch.zeros(self.F, self.D, device=u.device).index_add_(0, self.fr, -dSdu) / self.N
+        hess = None
+        if need_hess:     # as DMEGrid: own-end curvature of log Z_i, x2 for the other end
+            Hi = Hg * norm[:, None, None] - gG[:, :, None] * gG[:, None, :] * (norm ** 2)[:, None, None]
+            hess = torch.zeros(self.F, self.D, self.D, device=u.device).index_add_(0, self.fr, 2 * Hi) / self.N
+        return score, grad, hess
+
+
+# the pair sums here are plain PyTorch, slower per pair than the fused CuPy kernel that choose_backend's cost model
+# was measured with
+PAIR_COST_FACTOR = 4.0
+
+
+def per_frame_evaluator(pos, fr, sig, F, d_frames, device, backend='grid'):
+    """DME objective with one drift value per frame: the density grid (default), exact pair sums (spatial hash,
+    backend='exact'), or whichever the cost model says is cheaper (backend='auto'; only used for isotropic 3D, see
+    dme_prior_estimate). The grid's cost grows with the volume covered (in CRLB units), the pair sum's with the number of
+    neighbour pairs."""
+    if backend == 'auto':
+        _, c = choose_backend(pos, sig, device=device)
+        backend = 'grid' if c['t_grid'] < PAIR_COST_FACTOR * c['t_exact'] else 'exact'
+    if backend == 'grid':
+        return DMEGrid(pos, fr, sig, 1, d_frames, F, device=device)
+    return DMEPairs(pos, fr, sig, d_frames, F, device=device)
+
+
+def seg_measurements(pos, fr, sig, F, d_frames, L, device, trust=1.5, backend='grid'):
     """Newton measurements of the drift of each L-frame segment at the current drift d_frames [F, D] (px).
     Returns z [T, D] px and information J [T, D, D] px^-2 (0 for segments without a valid measurement)."""
-    e = DMEGrid(pos, fr, sig, 1, d_frames, F, device=device)
+    e = per_frame_evaluator(pos, fr, sig, F, d_frames, device, backend)
     _, g, H = e.score_and_grad(e.state, need_hess=True)
     T = (F + L - 1) // L
     seg = torch.arange(F, device=g.device) // L
@@ -176,19 +278,19 @@ def seg_to_frames(xseg, L, F):
     return np.stack([np.interp(f, tc, xseg[:, d]) for d in range(xseg.shape[1])], 1)
 
 
-def refine(pos, frame, sig, F, d, L, scales, device):
+def refine(pos, frame, sig, F, d, L, scales, device, backend='grid'):
     """Learned-prior refinement of drift d [F, D] with segment length L, coarse to fine over kernel widths."""
     if (F + L - 1) // L < 24:
         return d
     for sc in scales:
-        z, info = seg_measurements(pos, frame, sig * sc, F, d, L, device)
+        z, info = seg_measurements(pos, frame, sig * sc, F, d, L, device, backend=backend)
         d = seg_to_frames(smooth_net(z, info, device), L, F)
         d = d - d.mean(0)
     return d
 
 
-def dme_score(pos, frame, sig, F, d, device):
-    e = DMEGrid(pos, frame, sig, 1, d, F, device=device)
+def dme_score(pos, frame, sig, F, d, device, backend='grid'):
+    e = per_frame_evaluator(pos, frame, sig, F, d, device, backend)
     return e.score_and_grad(e.state, need_grad=False)[0].item()
 
 
@@ -214,18 +316,20 @@ def checkerboard(pos, ntiles=8, min_frac=0.3):
 
 def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda', scales=(4, 2, 1, 1, 1),
                     L_frames=(6, 12, 24, 48, 96, 192), fpb_divs=(1, 10), ntiles=8, min_locs_per_seg=30,
-                    verbose=True, return_info=False):
+                    verbose=True, return_info=False, isotropic3d=False):
     """Drift [F, D] in the units of positions (corrected = positions - drift[framenum]).
     crlb: [N, D] or [D]; the mean CRLB is used.
-    3D (D = 3): no 3D grid. The x, y drift is estimated on the x-y projection, then the z drift on the x-z
-    projection of the x, y-corrected localizations; both with 2D grids."""
+    3D (default): x, y are estimated on the x-y projection and then z on the x-z projection, both with 2D grids.
+    isotropic3d=True: the objective is evaluated in 3D, with a 3D grid or exact pair sums (spatial hash), whichever is
+    cheaper. Only worth it when binding sites at different depths overlap in projection (very dense 3D samples): then
+    it is up to 2-3x more precise, but 10-30x slower."""
     pos = np.ascontiguousarray(positions, dtype=np.float32)
     frame = np.ascontiguousarray(framenum, dtype=np.int32)
     D = pos.shape[1]
     F = int(numframes if numframes is not None else frame.max() + 1)
     crlb = np.asarray(crlb, np.float32)
     crlb = np.broadcast_to(crlb[:D], pos.shape) if crlb.ndim == 1 else crlb.reshape(-1, D)
-    if D == 3:
+    if D == 3 and not isotropic3d:
         kw = dict(numframes=F, device=device, scales=scales, L_frames=L_frames, fpb_divs=fpb_divs, ntiles=ntiles,
                   min_locs_per_seg=min_locs_per_seg, verbose=verbose, return_info=True)
         dxy, info_xy = dme_prior_estimate(pos[:, :2], frame, crlb[:, :2], **kw)
@@ -236,6 +340,7 @@ def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda',
         return (d, dict(xy=info_xy, z=info_z)) if return_info else d
     N = len(pos)
     sig = crlb.mean(0).astype(np.float32)
+    be = 'auto' if D == 3 else 'grid'
     rule = int(np.clip(round(20000 * F / N), 10, 2000))
     fpbs = sorted({max(10, rule // dv) for dv in fpb_divs}, reverse=True)
     Ls = sorted({L for L in L_frames if L * N / F >= min_locs_per_seg and (F + L - 1) // L >= 24})
@@ -246,12 +351,12 @@ def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda',
     cv = {}
     for fpb in fpbs:
         d0 = [v2(p, f, fpb) for p, f in halves]
-        cv[('dme', fpb, 0)] = (dme_score(*halves[1], sig, F, d0[0], device) +
-                               dme_score(*halves[0], sig, F, d0[1], device))
+        cv[('dme', fpb, 0)] = (dme_score(*halves[1], sig, F, d0[0], device, be) +
+                               dme_score(*halves[0], sig, F, d0[1], device, be))
         for L in Ls:
-            dh = [refine(p, f, sig, F, d, L, scales, device) for (p, f), d in zip(halves, d0)]
-            cv[('smooth', fpb, L)] = (dme_score(*halves[1], sig, F, dh[0], device) +
-                                      dme_score(*halves[0], sig, F, dh[1], device))
+            dh = [refine(p, f, sig, F, d, L, scales, device, be) for (p, f), d in zip(halves, d0)]
+            cv[('smooth', fpb, L)] = (dme_score(*halves[1], sig, F, dh[0], device, be) +
+                                      dme_score(*halves[0], sig, F, dh[1], device, be))
     kind, fpb, L = max(cv, key=cv.get)
     if verbose:
         print(f"DME v2: start = fixed spline at {fpb} frames/bin, " +
@@ -259,7 +364,7 @@ def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda',
               flush=True)
     d = v2(pos, frame, fpb)
     if kind == 'smooth':
-        d = refine(pos, frame, sig, F, d, L, scales, device)
+        d = refine(pos, frame, sig, F, d, L, scales, device, be)
     d = np.asarray(d, np.float32)
     if return_info:
         return d, dict(start_framesperbin=fpb, segment_frames=L if kind == 'smooth' else None, cv=cv)
