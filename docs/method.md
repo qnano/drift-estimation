@@ -33,9 +33,12 @@ DME v2 computes that density once on a regular grid, instead of forming pairs:
 - large fields of view are processed in tiles; empty tiles are skipped.
 
 The cost is O(N + grid cells) per evaluation, independent of the number of neighbours, so dense DNA-PAINT data
-(thousands of neighbours per localization) is as cheap as sparse data. For sparse data an exact pair kernel (GPU
-spatial hash, CuPy or PyTorch) is used instead; the cheaper backend is chosen automatically. Grid and exact evaluation
-agree to ~10<sup>−5</sup> in the objective; the final drift is identical to < 10<sup>−6</sup> px.
+(thousands of neighbours per localization) is as cheap as sparse data. But the number of grid cells grows with the
+area in units of σ: for very precise localizations over a large field of view (e.g. 2 nm over 66 µm: billions of cells)
+or for sparse data, an exact pair sum is cheaper (GPU spatial hash: localizations sorted by cell, fused CuPy kernels,
+or PyTorch without CuPy). A cost model picks the cheaper of the two for every evaluation, also for the gradient and
+curvature used by the learned prior. Grid and exact evaluation agree to ~10<sup>−5</sup> in the objective and ~0.5%
+in gradient and curvature; the final drift is identical to ~10<sup>−4</sup> px.
 
 The CRLB enters as one value per axis (the mean). Per-localization CRLBs changed the result by less than 1% in our
 tests; they remain available in `method='v1'`.
@@ -77,12 +80,14 @@ bin length depends on the dataset. DME v2 has no such setting; instead it:
    not depend on the sample or the field of view.
 3. **Repeats** steps 1–2 at kernel widths 4σ, 2σ, 1σ, 1σ, 1σ, starting from the DME fixed-spline estimate.
 
-The segment length *L* (6–192 frames, at least 30 localizations per segment and 24 segments) and the bin length of the
-fixed-spline start (~20k localizations per bin, and 10× finer) are chosen by a **spatial cross-fit**: the localizations
+The segment length *L* (1–192 frames, at least 30 localizations per segment and 24 segments) and the bin length of the
+fixed-spline start (~20k localizations per bin, and 10× finer) are chosen by a **spatial cross-fit**; with at least 30
+localizations per frame, a drift value per frame without prior is also a candidate. The localizations
 are split into two halves by an 8×8 checkerboard (different binding sites, same drift); the drift estimated from one
 half is scored by the DME objective of the other half, and vice versa. Too noisy and too smooth estimates both score
 lower on the other half. The plain fixed-spline estimate is one of the candidates, so DME v2 falls back to it when the
-prior does not help. The chosen candidate is then run on all localizations.
+prior does not help. The chosen candidate is then run on all localizations. The multi-start (AIM, RCC, zero) runs
+once per half; the other fixed-spline fits start from its result.
 
 **Training.** The network is trained only on synthetic sequences (`training/train_temporal_prior.py`): drift from a
 broad generator (polynomials, slow sinusoids, random walks, vibrations, steps, Gaussian-process drift, damped

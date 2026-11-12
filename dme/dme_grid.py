@@ -378,10 +378,12 @@ def choose_backend(positions, sigma, h=0.5, r=3.0, device='cuda'):
     dims = (c.max(0).values + 2).tolist()
     mult = [int(math.prod(dims[:d])) for d in range(D)]
     key = (c * torch.tensor(mult, device=device)).sum(1)
-    cnt = torch.bincount(key, minlength=int(math.prod(dims)))
+    ukey, ucnt = torch.unique(key, return_counts=True)        # sparse cell counts (no dense array over the volume)
     nb = torch.zeros_like(key, dtype=torch.float32)
     for o in itertools.product([-1, 0, 1], repeat=D):
-        nb += cnt[key + sum(o[d] * mult[d] for d in range(D))].float()
+        nk = key + sum(o[d] * mult[d] for d in range(D))
+        idx = torch.searchsorted(ukey, nk).clamp(max=len(ukey) - 1)
+        nb += torch.where(ukey[idx] == nk, ucnt[idx], 0).float()
     cand = float(nb.sum())
     t_exact = 1.6e-11 * cand * (2 if D == 2 else 1.3)
     t_grid = 1e-8 * len(u) + 2e-9 * cells_grid * (1 + D) / 3

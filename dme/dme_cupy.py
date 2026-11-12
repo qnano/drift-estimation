@@ -80,17 +80,63 @@ __global__ void pair_kernel(const float* __restrict__ u, const int* __restrict__
     if (GRAD) for (int d = 0; d < D; d++) out[i * D + d] = acc[d];
     else out[i] = 1.f + zsum;
 }
+
+// Own-end sums for the curvature (constant CRLB): per point i, over other-frame neighbours j with d = u_i - u_j,
+// K = exp(-|d|^2/2):  out[i] = [ sum K,  sum dK/du_i = -sum K d (D values),  sum K (d d^T - I) (D(D+1)/2 values) ]
+template<int D>
+__global__ void own_kernel(const float* __restrict__ u, const int* __restrict__ fr,
+                           const int* __restrict__ cstart, const int* __restrict__ ccount,
+                           const int* __restrict__ blk_cell, const int* __restrict__ blk_start, const int* __restrict__ blk_end,
+                           const long long* __restrict__ offs, int noff, float* __restrict__ out, float r2)
+{
+    constexpr int NH = D * (D + 1) / 2, NO = 1 + D + NH;
+    const int b = blockIdx.x;
+    const long long cell = blk_cell[b];
+    const int i = blk_start[b] + threadIdx.x;
+    const bool active = i < blk_end[b];
+    const int ii = active ? i : blk_start[b];
+    float ui[D];
+    for (int d = 0; d < D; d++) ui[d] = u[ii * D + d];
+    const int fi = fr[ii];
+    float z = 0.f, g[D], h[NH];
+    for (int d = 0; d < D; d++) g[d] = 0.f;
+    for (int k = 0; k < NH; k++) h[k] = 0.f;
+    for (int o = 0; o < noff; o++) {
+        const long long nc = cell + offs[o];
+        const int j0 = cstart[nc], j1 = j0 + ccount[nc];
+        for (int j = j0; j < j1; j++) {
+            float diff[D], d2 = 0.f;
+            for (int d = 0; d < D; d++) { diff[d] = ui[d] - u[j * D + d]; d2 += diff[d] * diff[d]; }
+            if (d2 >= r2 || fr[j] == fi) continue;
+            const float e = __expf(-0.5f * d2);
+            z += e;
+            for (int d = 0; d < D; d++) g[d] -= diff[d] * e;
+            int k = 0;
+            for (int a = 0; a < D; a++)
+                for (int c = a; c < D; c++, k++) h[k] += (diff[a] * diff[c] - (a == c ? 1.f : 0.f)) * e;
+        }
+    }
+    if (!active) return;
+    out[i * NO] = z;
+    for (int d = 0; d < D; d++) out[i * NO + 1 + d] = g[d];
+    for (int k = 0; k < NH; k++) out[i * NO + 1 + D + k] = h[k];
+}
 '''
 
-_NAMES = [f'pair_kernel<{D},{p},{g}>' for D in (2, 3) for p in ('false', 'true') for g in ('false', 'true')]
+_NAMES = ([f'pair_kernel<{D},{p},{g}>' for D in (2, 3) for p in ('false', 'true') for g in ('false', 'true')] +
+          [f'own_kernel<{D}>' for D in (2, 3)])
 _module = None
 
 
-def _kernel(D, perspot, grad):
+def _get(name):
     global _module
     if _module is None:
         _module = cp.RawModule(code=_SRC, options=('-std=c++14', '--use_fast_math'), name_expressions=_NAMES)
-    return _module.get_function(f'pair_kernel<{D},{"true" if perspot else "false"},{"true" if grad else "false"}>')
+    return _module.get_function(name)
+
+
+def _kernel(D, perspot, grad):
+    return _get(f'pair_kernel<{D},{"true" if perspot else "false"},{"true" if grad else "false"}>')
 
 
 def _cp(t):
@@ -177,3 +223,39 @@ class DMECupy(DMEGPU):
         self.stats['t_eval'] += t2 - t0
         self.stats['evals'] += 1
         return score, grad
+
+    @torch.no_grad()
+    def score_grad_hess(self, state):
+        """Score, per-frame gradient [F, D] and per-frame DxD curvature [F, D, D] of the objective, with one drift value
+        per frame (framesperbin=1) and a constant CRLB; same definitions as DMEGrid.score_and_grad(need_hess=True):
+        the curvature is the own-end curvature of log Z_i, x2 for the other end."""
+        assert self.const_crlb and self.fpb == 1, 'score_grad_hess: constant CRLB and framesperbin=1 only'
+        D = self.D
+        u = self.v - state[self.fr]
+        H = self._hash(u)
+        order, count, start, blk_cell, blk_start, blk_end, offs = H
+        us = u[order].contiguous()
+        frs = self.fr32[order].contiguous()
+        NO = 1 + D + D * (D + 1) // 2
+        own = torch.empty((len(us), NO), device=self.dev, dtype=torch.float32)
+        sync(self.dev)
+        _get(f'own_kernel<{D}>')((len(blk_cell),), (self.block,),
+                                 (_cp(us), _cp(frs), _cp(start), _cp(count), _cp(blk_cell), _cp(blk_start),
+                                  _cp(blk_end), _cp(offs), np.int32(len(offs)), _cp(own), np.float32(self.r ** 2)))
+        Z = 1.0 + own[:, 0]
+        score = torch.log(Z.double()).mean().float()
+        norm = (1.0 / Z).contiguous()
+        gs = self._launch(H, us, frs, us, norm, True)               # both ends, sorted order
+        fsorted = self.fr[order]
+        grad = torch.zeros(self.F, D, device=self.dev).index_add_(0, fsorted, gs) / self.N
+        gG = own[:, 1:1 + D]
+        Hg = torch.empty(len(us), D, D, device=self.dev)
+        k = 1 + D
+        for a in range(D):
+            for c in range(a, D):
+                Hg[:, a, c] = Hg[:, c, a] = own[:, k]
+                k += 1
+        Hi = Hg * norm[:, None, None] - gG[:, :, None] * gG[:, None, :] * (norm ** 2)[:, None, None]
+        hess = torch.zeros(self.F, D, D, device=self.dev).index_add_(0, fsorted, 2 * Hi) / self.N
+        sync(self.dev)
+        return score, grad, hess
