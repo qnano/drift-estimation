@@ -6,7 +6,7 @@ import time
 import numpy as np
 import torch
 
-from .dme_gpu import DMEGPU, cupy_available
+from .dme_gpu import DMEGPU, cupy_available, mem_scale
 
 
 # ----------------------------------------------------------------------------- RCC
@@ -60,7 +60,7 @@ def rcc_torch(xy, framenum, timebins=10, zoom=2, sigma=1.0, maxdrift_px=None, nu
     i, j = torch.triu_indices(timebins, timebins, 1, device=dev)
     hw = int(min(Hf, Wf) // 2 - 2) if maxdrift_px is None else int(min(maxdrift_px * zoom, min(Hf, Wf) // 2 - 2))
     shifts = []
-    bs = max(1, int(1.5e9 // (Hf * Wf * 16)))   # batch pairs to bound memory (complex64 product + real cc)
+    bs = max(1, int(1.5e9 * mem_scale(dev) // (Hf * Wf * 16)))   # batch pairs to bound memory (complex64 product + real cc)
     for s in range(0, len(i), bs):
         a, c = i[s:s + bs], j[s:s + bs]
         cc = torch.fft.ifft2(Fimg[a].conj() * Fimg[c]).real

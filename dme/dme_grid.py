@@ -25,7 +25,7 @@ import numpy as np
 import torch
 import torch.nn.functional as Fn
 
-from .dme_gpu import catmull_rom_basis, sync, cupy_available
+from .dme_gpu import catmull_rom_basis, sync, cupy_available, gpu_budget, mem_scale
 
 
 def _kernels(h, rk, dev):
@@ -73,7 +73,8 @@ class DMEGrid:
         self.rk = int(math.ceil(kernel_radius * math.sqrt(1 - h * h / 3) / h))
         self.kern = _kernels(h, self.rk, dev)
         self.halo = self.rk + 2
-        self.max_tile_cells, self.batch_cells = max_tile_cells, batch_cells
+        sc = mem_scale(dev)                    # defaults are sized for 8 GB
+        self.max_tile_cells, self.batch_cells = max(int(max_tile_cells * sc), 1 << 16), max(int(batch_cells * sc), 1 << 16)
         self._cornerset = torch.tensor(list(itertools.product([0, 1], repeat=self.D)), device=dev)
         self._tileoffs = torch.tensor(list(itertools.product([-1, 0, 1], repeat=self.D)), device=dev)
 
@@ -330,7 +331,7 @@ class DMEGrid:
         if precondition:
             _, _, Hs = self.score_and_grad(x0, need_hess=True)
             # SPD block preconditioner from -H (ascent problem), eigenvalues clamped
-            ev, evec = torch.linalg.eigh(-Hs)
+            ev, evec = _eigh_chunked(-Hs)
             floor = ev.clamp(min=0).mean() * 1e-2 + 1e-12
             ev = ev.clamp(min=float(floor))
             L = evec * ev.rsqrt()[:, None, :] @ evec.transpose(1, 2)      # P^{-1/2}
@@ -360,6 +361,20 @@ class DMEGrid:
         d = self.drift_per_frame(self.state) * self.scale
         d = d - d.mean(0)
         return d.cpu().numpy()
+
+
+def _eigh_chunked(A, mem_fraction=0.5, bytes_per_matrix=300e3):
+    """torch.linalg.eigh of [B, D, D] in chunks, on the device of A. CUDA's batched eigh needs about 270 kB of
+    workspace per matrix (measured for D = 2 and 3), i.e. 23 GB for 92k frames; the chunk is sized to half of the GPU
+    memory budget (dme_gpu.gpu_budget)."""
+    if A.is_cuda:
+        chunk = int(max(gpu_budget(A.device) * mem_fraction / bytes_per_matrix, 64))
+    else:
+        chunk = len(A)
+    if len(A) <= chunk:
+        return torch.linalg.eigh(A)
+    parts = [torch.linalg.eigh(A[i:i + chunk]) for i in range(0, len(A), chunk)]
+    return torch.cat([p[0] for p in parts]), torch.cat([p[1] for p in parts])
 
 
 # ---------------------------------------------------------------------- backend choice

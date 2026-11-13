@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as Fn
 
 from .dme_grid import DMEGrid, dme_grid_estimate, choose_backend
-from .dme_gpu import cupy_available
+from .dme_gpu import cupy_available, mem_scale
 
 WEIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'weights', 'temporal_prior.pt')
 LAGS = (1, 2, 4, 8)
@@ -128,6 +128,7 @@ def _pair_sums(u, fr, R, w=None, need_hess=False, budget=1 << 23):
     chunks of bounded candidate count, so memory is O(N + budget) however many pairs there are."""
     N, D = u.shape
     dev = u.device
+    budget = max(int(budget * mem_scale(dev)), 1 << 16)
     cell = torch.floor((u - u.min(0).values) / R).long() + 1
     dims = (cell.max(0).values + 2).tolist()
     mult = [int(math.prod(dims[:d])) for d in range(D)]

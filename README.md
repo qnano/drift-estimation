@@ -22,6 +22,8 @@ How it works: [docs/method.md](docs/method.md).
 On simulated DNA-PAINT data DME v2 is 1.6–2.1× more precise than COMET, the next best method, and 2–5× more precise
 than AIM, RCC and the 2021 DME code, although each of those was run at its best settings, picked with the true drift
 (DME v2 has no settings). On a real DNA-PAINT nanoruler (the dataset in `example_data/`) it is also the most precise.
+On raw 3D dSTORM data with real drift (EPFL challenge microtubules, 6.7M localizations) its split-half error is
+0.3 nm in x and y and 1 nm in z, against 0.5–1.3 nm for the 2021 code and 2–4 nm for AIM and RCC at their best settings.
 It is slower than AIM and RCC: 3 s for 10k localizations, 20 s for 1M, 3 minutes for 10M on an RTX 3090.
 Details, tables and the settings searched: [docs/comparison.md](docs/comparison.md).
 
@@ -50,6 +52,9 @@ corrected = positions - drift[framenum]
   `framesperbin` to set.
 - `method='v1', framesperbin=100`: the algorithm of the 2021 paper (exact pairwise objective, RCC start), on the GPU.
   Supports per-localization CRLBs (`perSpotCRLB=True`).
+- `gpuMemoryGB=8`: GPU memory the estimation may use (or what is free, if less). Everything stays on the GPU; the
+  work is split into smaller chunks when less memory is allowed. The localizations themselves must fit (about 1.5 GB
+  for 7M localizations).
 - `drift_set1`/`drift_set2` are estimates from two halves of the data; `dme.precision(drift_set1, drift_set2)` gives
   their RMS difference as an indication of the precision. Disable with `estimatePrecision=False`.
 

@@ -82,6 +82,50 @@ The ranking is the same as in the simulations, with smaller margins. Because the
 metric may favour the DME-based methods somewhat; the simulations, which use the true drift, do not have
 this limitation.
 
+### dSTORM microtubules and nuclear pores, raw data with real drift (EPFL SMLM challenge)
+
+Two raw astigmatic 3D dSTORM movies of the [EPFL SMLM challenge 2016](https://srm.epfl.ch/srm/dataset/challenge-3D-real/index.html)
+(Ries lab, AF647): `Tubulin-A647-3D` (92k frames, 6.7M localizations used) and `NPC-A647-3D` (Nup107, 150k frames, 0.9M
+localizations used). The movies were localized in 3D with a spline PSF calibrated on the bead stacks and not drift
+corrected. There is no ground truth, so the error is estimated from the data: the field of view is split into two
+halves by a 2 um checkerboard, every method estimates the drift on each half independently, and the RMS difference of
+the two traces divided by sqrt(2) is the error of a half-data estimate. This measures noise only: a setting that
+smooths the drift away also scores well, so the long-window settings of AIM and RCC are favoured by it. For each method
+the setting with the smallest error is shown (DME v2 has no settings). The drift over the movie is 31 / 56 / 18 nm
+(x / y / z) for tubulin and 7 / 9 / 47 nm for the nuclear pores.
+
+![tubulin](epfl_tubulin.png)
+
+Tubulin:
+
+| method | error x (nm) | error y (nm) | error z (nm) | runtime, all data (s) | best setting (of) |
+|---|---|---|---|---|---|
+| **DME v2** | **0.30** | **0.37** | **1.0** | 120 | – |
+| DME 2021 (3D) | 0.50 | 0.78 | 1.0 | 49 | 250 frames per bin (2), best 1M localizations |
+| DME 2021 (2D) | 0.44 | 1.29 | – | 12 | 1000 frames per bin (5), best 1M localizations |
+| AIM (2D) | 2.4 | 4.4 | – | 1 | 2000 frames per bin, 0.1 px (21) |
+| RCC (2D) | 3.9 | 4.8 | – | <1 | 10000 frames per bin (6) |
+| RCC 2021 code (3D) | 4.5 | 8.3 | 13 | 38 | 5000 frames per bin (3) |
+
+Nuclear pores:
+
+| method | error x (nm) | error y (nm) | error z (nm) | best setting (of) |
+|---|---|---|---|---|
+| **DME v2** | **0.50** | **0.35** | **2.5** | – |
+| DME 2021 (3D) | 1.1 | 1.0 | 3.3 | 1000 frames per bin (3) |
+| RCC (2D) | 1.4 | 1.5 | – | 15000 frames per bin (7) |
+| AIM (2D) | 2.0 | 2.7 | – | 4000 frames per bin, 0.1 px (18) |
+| RCC 2021 code (3D) | 4.3 | 3.4 | 14 | 10000 frames per bin (3) |
+
+Notes: AIM here is the 2D PyTorch port in this package. "RCC (2D)" is `rcc_torch` with `maxdrift_px=10`, the peak search
+window of the 2021 RCC code; with its default (whole image) it fails on these sparse dSTORM time bins. For tubulin the
+RCC bins are interpolated with a cubic spline (3.3 / 4.5 nm with linear interpolation); for the pores linearly. The pixel size
+is not given with the data; 117.0 / 118.2 nm (tubulin) and 134.9 / 142.0 nm (pores) per pixel in x / y were taken
+from the scale of the Ries-lab submission on the challenge site. z is in stage units of the bead calibration (for
+tubulin with an assumed 10 nm step). In rendered images the methods are hard to tell apart: a few nm of drift error
+is small next to the ~10 nm localization precision of this data. DME v2 needed 3.7 GB of
+GPU memory for the 6.7M tubulin localizations (limit: `gpuMemoryGB`, default 8). Scripts: `benchmark/realdata_epfl/`.
+
 ## Reproducing
 
 ```

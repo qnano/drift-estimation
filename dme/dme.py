@@ -19,6 +19,7 @@ import time
 import warnings
 import numpy as np
 
+from . import dme_gpu
 from .dme_gpu import default_device
 
 _IGNORED_LEGACY_ARGS = ('useCuda', 'maxNeighbors', 'useDebugLibrary', 'traces')
@@ -42,6 +43,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
                  device=None,
                  verbose=True,
                  isotropic3d=False,
+                 gpuMemoryGB=8,
                  **legacy_kwargs):
     """
     Estimate drift by entropy minimization.
@@ -72,6 +74,10 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
                    is cheaper) instead of on the x-y and x-z projections. Only worth it for very dense 3D samples where
                    binding sites at different depths overlap in projection; much slower.
 
+    gpuMemoryGB:   GPU memory the estimation may use (default 8, or what is free on the device if that is less).
+                   All work stays on the GPU; the chunk sizes of the pair sums, density grids and per-frame
+                   decompositions are scaled to this budget, so less memory means more, smaller chunks
+
     Returns drift [F, D] (corrected positions = positions - drift[framenum]), and if estimatePrecision is True
     also (drift_set1, drift_set2).
     """
@@ -90,6 +96,7 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
     crlb = np.ascontiguousarray(crlb[:, :D])
     F = int(numframes if numframes is not None else framenum.max() + 1)
     device = default_device(device)
+    dme_gpu.GPU_MEMORY_LIMIT_GB = float(gpuMemoryGB)
 
     if maxspots is not None and maxspots < len(positions):
         best = np.sort(np.argsort(np.prod(crlb, 1))[:maxspots])

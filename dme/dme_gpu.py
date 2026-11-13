@@ -33,6 +33,25 @@ def default_device(device=None):
     return 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
+GPU_MEMORY_LIMIT_GB = 8.0     # set by dme_estimate(gpuMemoryGB=...)
+
+
+def gpu_budget(device):
+    """Bytes of GPU memory the chunked steps may still use: the limit (GPU_MEMORY_LIMIT_GB) minus what PyTorch has
+    allocated, and never more than what is free on the device. None on the CPU."""
+    dev = torch.device(device)
+    if dev.type != 'cuda':
+        return None
+    free = torch.cuda.mem_get_info(dev)[0] + torch.cuda.memory_reserved(dev) - torch.cuda.memory_allocated(dev)
+    return max(min(GPU_MEMORY_LIMIT_GB * 1e9 - torch.cuda.memory_allocated(dev), free), 64e6)
+
+
+def mem_scale(device):
+    """Factor (<= 1) for the default chunk sizes, which are tuned for 8 GB: smaller when less memory is allowed/free."""
+    b = gpu_budget(device)
+    return 1.0 if b is None else min(1.0, b / 8e9)
+
+
 _cupy_ok = None
 
 
@@ -90,7 +109,7 @@ class DMEGPU:
 
         self.r = search_mult
         self.skin = skin
-        self.pair_chunk = pair_chunk
+        self.pair_chunk = max(int(pair_chunk * mem_scale(device)), 10_000)
 
         self.fpb = framesperbin
         if framesperbin > 1:
