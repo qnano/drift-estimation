@@ -13,7 +13,7 @@ from scipy.ndimage import gaussian_filter
 D = os.path.join(os.environ.get('EPFL_DATA', '/mnt/data/SMLM_challenge'), 'Tubulin-A647-3D')
 U = np.array([117.0, 118.2, 1000.0])
 INK, MUTED, GRID = '#1f1f1e', '#6b6a64', '#e6e5e0'
-COL = {'dme_v2': '#2a78d6', 'dme2021': '#1baf7a', 'aim': '#eda100', 'rcc': '#e87ba4', 'comet': '#8a63d2'}
+COL = {'dme_v2': '#2a78d6', 'dme2021': '#1baf7a', 'aim': '#eda100', 'rcc': '#8f8e88', 'comet': '#d1432b'}
 R = {}
 for m in ('new', 'legacy', 'comet'):
     z = np.load(f'{D}/drift/tub_{m}.npz')
