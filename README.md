@@ -22,7 +22,7 @@ How it works: [docs/method.md](docs/method.md).
 On simulated DNA-PAINT data DME v2 is 1.6–2.1× more precise than COMET, the next best method, and 2–5× more precise
 than AIM, RCC and the 2021 DME code, although each of those was run at its best settings, picked with the true drift
 (DME v2 has no settings). On a real DNA-PAINT nanoruler (the dataset in `example_data/`) it is also the most precise.
-On raw 3D dSTORM data with real drift (EPFL challenge microtubules, 6.7M localizations) its split-half error is
+On 3D dSTORM data with real drift (EPFL challenge microtubules, 6.7M localizations) its split-half error is
 0.3–0.4 nm in x and y and 1 nm in z. COMET at its best window length reaches the same x-y error (on the 1M most
 precise localizations, 4.5× slower); the 2021 code gives 0.5–0.8 nm, AIM 1.5–1.8 nm and RCC 4–5 nm (figure below).
 It is slower than AIM and RCC: 3 s for 10k localizations, 20 s for 1M, 3 minutes for 10M on an RTX 3090.

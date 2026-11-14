@@ -96,7 +96,7 @@ zx, zy = ex[i] - ZL / 2, ey[j] - ZL / 2
 plt.rcParams.update({'font.size': 10, 'axes.edgecolor': MUTED, 'axes.labelcolor': INK, 'xtick.color': MUTED,
                      'ytick.color': MUTED, 'text.color': INK, 'font.family': 'DejaVu Sans'})
 fig = plt.figure(figsize=(14, 9.4), dpi=150)
-fig.suptitle('Drift correction of raw 3D dSTORM microtubules', fontsize=16, fontweight='bold', x=0.015, ha='left',
+fig.suptitle('3D drift correction of dSTORM microtubules', fontsize=16, fontweight='bold', x=0.015, ha='left',
              y=0.975)
 fig.text(0.015, 0.93, f'EPFL SMLM challenge 2016, Tubulin-A647-3D (Ries lab): {F:,} frames, 6.7M localizations, '
          f'localized from the raw movie, no fiducials. Drift over the movie: {np.ptp(dv[:, 0]):.0f} nm in x, '
