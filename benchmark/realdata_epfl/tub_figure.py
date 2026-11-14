@@ -13,13 +13,13 @@ from scipy.ndimage import gaussian_filter
 D = os.path.join(os.environ.get('EPFL_DATA', '/mnt/data/SMLM_challenge'), 'Tubulin-A647-3D')
 U = np.array([117.0, 118.2, 1000.0])
 INK, MUTED, GRID = '#1f1f1e', '#6b6a64', '#e6e5e0'
-COL = {'dme_v2': '#2a78d6', 'dme2021': '#1baf7a', 'aim': '#eda100', 'rcc': '#e87ba4'}
+COL = {'dme_v2': '#2a78d6', 'dme2021': '#1baf7a', 'aim': '#eda100', 'rcc': '#e87ba4', 'comet': '#8a63d2'}
 R = {}
-for m in ('new', 'legacy'):
+for m in ('new', 'legacy', 'comet'):
     z = np.load(f'{D}/drift/tub_{m}.npz')
     R.update({k: z[k] for k in z.files})
 KEY = {'dme_v2': 'dme_v2_3d', 'dme2021': 'dme2021_3d_250', 'aim': 'aim_2000_0.1', 'rcc': 'rccw_10000'}
-NAME = {'dme_v2': 'DME v2', 'dme2021': 'DME 2021', 'aim': 'AIM', 'rcc': 'RCC'}
+NAME = {'dme_v2': 'DME v2', 'dme2021': 'DME 2021', 'aim': 'AIM', 'rcc': 'RCC', 'comet': 'COMET'}
 
 
 from scipy.interpolate import CubicSpline
@@ -47,6 +47,13 @@ for fb, e in rs.items():
     print('RCC cubic', fb, e.round(2), 'linear', split(f'rccw_{fb}').round(2), flush=True)
 RFB = min(rs, key=lambda fb: np.sqrt(np.mean(rs[fb] ** 2)))
 KEY['rcc'] = f'rccs_{RFB}'
+# COMET: best of the finished settings (window length in frames, 10 nm kernel)
+cs = {int(k.split('_')[1]): split(k[:-4]) for k in R if k.startswith('comet_') and k.endswith('_all')
+      and k[:-4] + '_h0' in R and k[:-4] + '_h1' in R}
+CFB = min(cs, key=lambda fb: np.sqrt(np.mean(cs[fb] ** 2)))
+KEY['comet'] = f'comet_{CFB}_10'
+for fb, e in sorted(cs.items()):
+    print('COMET', fb, e.round(2), flush=True)
 a = pd.read_csv(f'{D}/locs/Tubulin-A647-3D_locs.csv')
 a = a[(a['flags'] == 0) & (a.crlb_x < 0.1) & (a.crlb_y < 0.1)]
 P = np.stack([a.x * U[0], a.y * U[1]], 1)
@@ -128,7 +135,7 @@ ax1.set_xlabel('frame'); ax1.set_ylabel('drift [nm]'); ax1.set_xlim(0, F)
 ax1.set_title('Drift estimated by DME v2', fontsize=12, fontweight='bold', loc='left')
 ax1.legend(frameon=False, fontsize=9, ncol=3, loc='upper right')
 ax2 = fig.add_subplot(gbot[0, 1])
-for m in ('rcc', 'aim', 'dme2021', 'dme_v2'):
+for m in ('rcc', 'aim', 'dme2021', 'comet', 'dme_v2'):
     ax2.plot(t[T0:T1], nm(KEY[m] + '_all')[T0:T1, 0], color=COL[m], lw=2.0 if m == 'dme_v2' else 1.3, label=NAME[m])
 ax2.set_xlim(T0, T1); ax2.set_xlabel('frame'); ax2.set_ylabel('x drift [nm]')
 ax2.set_title('Part of the x trace, all methods', fontsize=12, fontweight='bold', loc='left')
@@ -143,6 +150,7 @@ for ax in (ax1, ax2):
 ax3 = fig.add_subplot(gbot[0, 2]); ax3.axis('off')
 ax3.set_title('Remaining drift error [nm RMS]', fontsize=12, fontweight='bold', loc='left')
 rows = [('dme_v2', 'DME v2', 'dme_v2_3d', 'none'), ('dme2021', 'DME 2021', 'dme2021_3d_250', '250 frames/bin'),
+        ('comet', 'COMET', KEY['comet'], f'{CFB} frames/window'),
         ('aim', 'AIM', 'aim_2000_0.1', '2000 frames/bin'), ('rcc', 'RCC', KEY['rcc'], f'{RFB} frames/bin')]
 zrcc = split('rccorig3d_5000')[2]
 cols = [0.0, 0.40, 0.53, 0.65, 0.79]
@@ -153,7 +161,7 @@ ax3.text(cols[4] - 0.08, 0.90, 'setting (best)', fontweight='bold', transform=ax
 ax3.plot([0, 1], [0.86, 0.86], color=MUTED, lw=0.8, transform=ax3.transAxes, clip_on=False)
 for r, (m, name, key, setting) in enumerate(rows):
     e = split(key)
-    y = 0.76 - r * 0.15
+    y = 0.77 - r * 0.118
     fw = 'bold' if m == 'dme_v2' else 'normal'
     ax3.add_patch(Rectangle((0, y - 0.02), 0.022, 0.07, color=COL[m], transform=ax3.transAxes, clip_on=False))
     ax3.text(0.04, y, name, fontweight=fw, transform=ax3.transAxes, fontsize=11)
@@ -166,9 +174,9 @@ ax3.text(0, 0.02, 'Split-half test: the field is split into two halves by a 2 µ
          'the drift on both halves\nseparately; error = RMS difference / √2. Noise only: smooth\n(long-bin) estimates '
          'score well even if they miss fast drift.', fontsize=8.6, color=MUTED, transform=ax3.transAxes, va='bottom',
          linespacing=1.4)
-fig.text(0.015, 0.012, 'AIM, RCC and DME 2021 at the setting with the smallest error (21, 6 and 2 settings tried); '
+fig.text(0.015, 0.012, f'AIM, RCC, DME 2021 and COMET at the setting with the smallest error (21, 6, 2 and {len(cs)} settings tried); '
          'DME v2 has no settings. AIM and RCC: 2D PyTorch ports of this package, RCC with cubic-spline interpolation.\n'
-         '* z of the 2021 RCC code (5000 frames/bin). DME 2021 uses the 1M most precise localizations (its limit). '
+         '* z of the 2021 RCC code (5000 frames/bin). DME 2021 (its limit) and COMET (run time) use the 1M most precise localizations. '
          'z in stage units of the bead calibration. Code: github.com/jcnossen/drift-estimation', fontsize=8.2,
          color=MUTED, ha='left', va='bottom', linespacing=1.45)
 fig.savefig(f'{D}/drift/tub_figure.png', dpi=150, facecolor='white')
