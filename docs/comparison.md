@@ -96,17 +96,21 @@ the setting with the smallest error is shown (DME v2 has no settings). The drift
 
 ![tubulin](epfl_tubulin.png)
 
-Tubulin:
+Tubulin (run time and GPU memory of one run on an RTX 3090, `benchmark/realdata_epfl/tub_bench.py`):
 
-| method | error x (nm) | error y (nm) | error z (nm) | runtime, all data (s) | best setting (of) |
-|---|---|---|---|---|---|
-| **DME v2** | **0.30** | **0.37** | **1.0** | 120 | – |
-| COMET (2D) | 0.44 | 0.40 | – | 310 | 1000-frame windows, 10 nm (2 so far), best 1M localizations |
-| DME 2021 (3D) | 0.50 | 0.78 | 1.0 | 49 | 250 frames per bin (2), best 1M localizations |
-| DME 2021 (2D) | 0.44 | 1.29 | – | 12 | 1000 frames per bin (5), best 1M localizations |
-| AIM (2D) | 2.4 | 4.4 | – | 1 | 2000 frames per bin, 0.1 px (21) |
-| RCC (2D) | 3.9 | 4.8 | – | <1 | 10000 frames per bin (6) |
-| RCC 2021 code (3D) | 4.5 | 8.3 | 13 | 38 | 5000 frames per bin (3) |
+| method | error x (nm) | error y (nm) | error z (nm) | run time (s) | GPU memory (GB) | localizations used | best setting (of) |
+|---|---|---|---|---|---|---|---|
+| **DME v2** | **0.30** | 0.37 | **1.0** | 58 | 4.5 | 6.7M | – |
+| COMET (2D) | 0.37 | **0.31** | – | 262 | 4.3 (and 12 GB RAM) | 1M | 2500-frame windows, 10 nm (6) |
+| DME 2021 (3D) | 0.50 | 0.78 | 1.0 | 32 | 0.3 | 1M | 250 frames per bin (2) |
+| DME 2021 (2D) | 0.44 | 1.29 | – | 12 | – | 1M | 1000 frames per bin (5) |
+| AIM (2D) | 2.4 | 4.4 | – | <1 | 1.3 | 6.7M | 2000 frames per bin, 0.1 px (21) |
+| RCC (2D) | 3.9 | 4.8 | – | <1 | 1.1 | 6.7M | 10000 frames per bin (6) |
+| RCC 2021 code (3D) | 4.5 | 8.3 | 13 | 38 | – | 6.7M | 5000 frames per bin (3) |
+
+COMET by window length (frames): 50: 1.23 / 1.64, 100: 0.82 / 1.08, 250: 0.61 / 0.69, 500: 0.53 / 0.50, 1000: 0.44 / 0.40,
+2500: 0.37 / 0.31 nm (x / y). Its error keeps falling with the window length up to the longest one tried, and at 2500
+frames it equals DME v2 in x and y (0.34 nm RMS over both axes for both methods).
 
 Nuclear pores:
 
@@ -118,16 +122,16 @@ Nuclear pores:
 | AIM (2D) | 2.0 | 2.7 | – | 4000 frames per bin, 0.1 px (18) |
 | RCC 2021 code (3D) | 4.3 | 3.4 | 14 | 10000 frames per bin (3) |
 
-Notes: COMET was run on the 1M most precise localizations of each subset: on a full half (3.4M) one run did not
-finish in 40 minutes and used 66 GB of RAM; two of its six window lengths have finished so far (250 frames: 0.61 / 0.69 nm). AIM here is the
+Notes: COMET and DME 2021 were run on the 1M most precise localizations of each subset: DME 2021 cannot use more, and
+COMET on a full half (3.4M) did not finish one run in 40 minutes and used 66 GB of RAM. AIM here is the
 2D PyTorch port in this package. "RCC (2D)" is `rcc_torch` with `maxdrift_px=10`, the peak search
 window of the 2021 RCC code; with its default (whole image) it fails on these sparse dSTORM time bins. For tubulin the
 RCC bins are interpolated with a cubic spline (3.3 / 4.5 nm with linear interpolation); for the pores linearly. The pixel size
 is not given with the data; 117.0 / 118.2 nm (tubulin) and 134.9 / 142.0 nm (pores) per pixel in x / y were taken
 from the scale of the Ries-lab submission on the challenge site. z is in stage units of the bead calibration (for
 tubulin with an assumed 10 nm step). In rendered images the methods are hard to tell apart: a few nm of drift error
-is small next to the ~10 nm localization precision of this data. DME v2 needed 3.7 GB of
-GPU memory for the 6.7M tubulin localizations (limit: `gpuMemoryGB`, default 8). Scripts: `benchmark/realdata_epfl/`.
+is small next to the ~10 nm localization precision of this data. GPU memory is that of the process as reported by nvidia-smi, CUDA context included; DME v2 stays within its
+memory budget (`gpu_memory_gb`, default 8). Scripts: `benchmark/realdata_epfl/`.
 
 ## Reproducing
 

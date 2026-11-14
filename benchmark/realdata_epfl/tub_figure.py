@@ -124,7 +124,7 @@ for k, (title, img, L, hl) in enumerate(panels):
     if k in (1, 2):
         ax.add_patch(Rectangle(((zx - cx) / 5, (zy - cy) / 5), ZL / 5, ZL / 5, fill=False, ec='white', lw=1.0, ls='--'))
 
-gbot = fig.add_gridspec(1, 3, left=0.055, right=0.985, top=0.405, bottom=0.10, wspace=0.26, width_ratios=[1, 1, 1.15])
+gbot = fig.add_gridspec(1, 3, left=0.055, right=0.985, top=0.405, bottom=0.125, wspace=0.26, width_ratios=[1, 1, 1.15])
 t = np.arange(F)
 T0, T1 = 56000, 68000
 ax1 = fig.add_subplot(gbot[0, 0])
@@ -146,38 +146,45 @@ for ax in (ax1, ax2):
     for sp in ('top', 'right'):
         ax.spines[sp].set_visible(False)
 
-# table of split-half errors
+# table: split-half errors, run time and GPU memory (drift/tub_bench.txt, written by tub_bench.py)
+bench = {}
+for line in open(f'{D}/drift/tub_bench.txt'):
+    w = line.split()
+    bench[w[0]] = dict(n=int(w[2]), time=float(w[4]), gpu=float(w[7]), ram=float(w[11]))
 ax3 = fig.add_subplot(gbot[0, 2]); ax3.axis('off')
-ax3.set_title('Remaining drift error [nm RMS]', fontsize=12, fontweight='bold', loc='left')
-rows = [('dme_v2', 'DME v2', 'dme_v2_3d', 'none'), ('comet', 'COMET', KEY['comet'], f'{CFB} frames/bin'),
-        ('dme2021', 'DME 2021', 'dme2021_3d_250', '250 frames/bin'),
-        ('aim', 'AIM', 'aim_2000_0.1', '2000 frames/bin'), ('rcc', 'RCC', KEY['rcc'], f'{RFB} frames/bin')]
+ax3.set_title('Remaining drift error, run time, memory', fontsize=12, fontweight='bold', loc='left')
+rows = [('dme_v2', 'DME v2', 'dme_v2_3d'), ('comet', 'COMET', KEY['comet']), ('dme2021', 'DME 2021', 'dme2021_3d_250'),
+        ('aim', 'AIM', 'aim_2000_0.1'), ('rcc', 'RCC', KEY['rcc'])]
 zrcc = split('rccorig3d_5000')[2]
-cols = [0.0, 0.40, 0.53, 0.65, 0.79]
-ax3.text(cols[1], 0.90, 'x', fontweight='bold', ha='right', transform=ax3.transAxes)
-ax3.text(cols[2], 0.90, 'y', fontweight='bold', ha='right', transform=ax3.transAxes)
-ax3.text(cols[3], 0.90, 'z', fontweight='bold', ha='right', transform=ax3.transAxes)
-ax3.text(cols[4] - 0.08, 0.90, 'setting (best)', fontweight='bold', transform=ax3.transAxes)
+cols = [0.38, 0.50, 0.60, 0.73, 0.87, 1.0]
+ax3.text((cols[0] + cols[2]) / 2 - 0.05, 0.965, 'error [nm RMS]', color=MUTED, ha='center', fontsize=9,
+         transform=ax3.transAxes)
+for cpos, hd in zip(cols, ('x', 'y', 'z', 'time', 'GPU', 'locs.')):
+    ax3.text(cpos, 0.90, hd, fontweight='bold', ha='right', transform=ax3.transAxes)
 ax3.plot([0, 1], [0.86, 0.86], color=MUTED, lw=0.8, transform=ax3.transAxes, clip_on=False)
-for r, (m, name, key, setting) in enumerate(rows):
+for r, (m, name, key) in enumerate(rows):
     e = split(key)
+    b = bench[m]
     y = 0.77 - r * 0.118
     fw = 'bold' if m == 'dme_v2' else 'normal'
     ax3.add_patch(Rectangle((0, y - 0.02), 0.022, 0.07, color=COL[m], transform=ax3.transAxes, clip_on=False))
     ax3.text(0.04, y, name, fontweight=fw, transform=ax3.transAxes, fontsize=11)
     zs = f'{e[2]:.1f}' if len(e) > 2 else (f'{zrcc:.0f}*' if m == 'rcc' else '–')
-    for cpos, sv in zip(cols[1:4], (f'{e[0]:.2f}', f'{e[1]:.2f}', zs)):
-        ax3.text(cpos, y, sv, ha='right', fontweight=fw, transform=ax3.transAxes, fontsize=11)
-    ax3.text(cols[4] - 0.08, y, setting, color=MUTED, transform=ax3.transAxes, fontsize=9.5)
-    print(name, e.round(2), flush=True)
+    ts = f'{b["time"]:.0f} s' if b['time'] >= 1 else '<1 s'
+    vals = (f'{e[0]:.2f}', f'{e[1]:.2f}', zs, ts, f'{b["gpu"]:.1f} GB', f'{b["n"] / 1e6:.1f}M')
+    for k_, (cpos, sv) in enumerate(zip(cols, vals)):
+        ax3.text(cpos, y, sv, ha='right', fontweight=fw if k_ < 3 else 'normal', transform=ax3.transAxes,
+                 fontsize=11 if k_ < 3 else 10, color=INK if k_ < 3 else MUTED)
+    print(name, e.round(2), b, flush=True)
 ax3.text(0, 0.02, 'Split-half test: the field is split into two halves by a 2 µm\ncheckerboard, each method estimates '
          'the drift on both halves\nseparately; error = RMS difference / √2. Noise only: smooth\n(long-bin) estimates '
          'score well even if they miss fast drift.', fontsize=8.6, color=MUTED, transform=ax3.transAxes, va='bottom',
          linespacing=1.4)
-fig.text(0.015, 0.012, f'AIM, RCC, DME 2021 and COMET at the setting with the smallest error (21, 6, 2 and {len(cs)} settings tried); '
-         'DME v2 has no settings. AIM and RCC: 2D PyTorch ports of this package, RCC with cubic-spline interpolation.\n'
-         '* z of the 2021 RCC code (5000 frames/bin). DME 2021 (its limit) and COMET (run time) use the 1M most precise localizations. '
-         'z in stage units of the bead calibration. Code: github.com/qnano/drift-estimation', fontsize=8.2,
-         color=MUTED, ha='left', va='bottom', linespacing=1.45)
+fig.text(0.015, 0.012, f'Best setting of each method by this error: COMET {CFB}-frame windows (of {len(cs)}), DME 2021 '
+         f'250 frames/bin (of 2), AIM 2000 frames/bin (of 21), RCC {RFB} frames/bin, cubic spline (of 6); DME v2 has no '
+         'settings.\nAIM, RCC: 2D PyTorch ports of this package. * z of the 2021 RCC code. Time and GPU memory on an '
+         f'RTX 3090. DME 2021 (its limit) and COMET (run time; {bench["comet"]["ram"]:.0f} GB RAM) use the 1M most '
+         'precise localizations.\nz in stage units. Code: github.com/qnano/drift-estimation', fontsize=8.0,
+         color=MUTED, ha='left', va='bottom', linespacing=1.4)
 fig.savefig(f'{D}/drift/tub_figure.png', dpi=150, facecolor='white')
 print('saved')
