@@ -104,7 +104,7 @@ Tubulin (run time and GPU memory of one run on an RTX 3090, `benchmark/realdata_
 | COMET (2D) | 0.37 | **0.31** | – | 262 | 4.3 (and 12 GB RAM) | 1M | 2500-frame windows, 10 nm (6) |
 | DME 2021 (3D) | 0.50 | 0.78 | 1.0 | 32 | 0.3 | 1M | 250 frames per bin (2) |
 | DME 2021 (2D) | 0.44 | 1.29 | – | 12 | – | 1M | 1000 frames per bin (5) |
-| AIM (2D) | 2.4 | 4.4 | – | <1 | 1.3 | 6.7M | 2000 frames per bin, 0.1 px (21) |
+| AIM (3D) | 1.8 | 1.5 | 2.0 | <1 | 1.7 | 6.7M | 4000 frames per bin, 0.1 px, 20 nm in z (33) |
 | RCC (2D) | 3.9 | 4.8 | – | <1 | 1.1 | 6.7M | 10000 frames per bin (6) |
 | RCC 2021 code (3D) | 4.5 | 8.3 | 13 | 38 | – | 6.7M | 5000 frames per bin (3) |
 
@@ -119,12 +119,14 @@ Nuclear pores:
 | **DME v2** | **0.50** | **0.35** | **2.5** | – |
 | DME 2021 (3D) | 1.1 | 1.0 | 3.3 | 1000 frames per bin (3) |
 | RCC (2D) | 1.4 | 1.5 | – | 15000 frames per bin (7) |
-| AIM (2D) | 2.0 | 2.7 | – | 4000 frames per bin, 0.1 px (18) |
+| AIM (3D) | 1.5 | 2.0 | 2.4 | 8000 frames per bin, 0.1 px (30) |
 | RCC 2021 code (3D) | 4.3 | 3.4 | 14 | 10000 frames per bin (3) |
 
 Notes: COMET and DME 2021 were run on the 1M most precise localizations of each subset: DME 2021 cannot use more, and
-COMET on a full half (3.4M) did not finish one run in 40 minutes and used 66 GB of RAM. AIM here is the
-2D PyTorch port in this package. "RCC (2D)" is `rcc_torch` with `maxdrift_px=10`, the peak search
+COMET on a full half (3.4M) did not finish one run in 40 minutes and used 66 GB of RAM. AIM is the PyTorch port in this
+package, in 3D: as in the original code, z is tracked after x-y on a 3D grid, with shifts along z only (z grid 20, 40
+or 80 nm). Like COMET, AIM scores best at the longest segments tried (4000 and 8000 frames), where it follows only the
+slow part of the drift. "RCC (2D)" is `rcc_torch` with `maxdrift_px=10`, the peak search
 window of the 2021 RCC code; with its default (whole image) it fails on these sparse dSTORM time bins. For tubulin the
 RCC bins are interpolated with a cubic spline (3.3 / 4.5 nm with linear interpolation); for the pores linearly. The pixel size
 is not given with the data; 117.0 / 118.2 nm (tubulin) and 134.9 / 142.0 nm (pores) per pixel in x / y were taken

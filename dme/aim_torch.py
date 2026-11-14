@@ -8,7 +8,11 @@ following github.com/YangLiuLab/AIM (AIM.m / IntersectionMax.m; the MEX intersec
   - peak position from the phase of the first Fourier harmonic of the (2R+1)^2 count map
   - stage 1: reference = first segment; stage 2: reference = full stage-1 corrected dataset
   - drift at segment centers -> cubic spline per frame
-2D only (xy). Units of positions: px.
+  - 3D (IntersectionMaxZ.m): after x-y is done, z is tracked on the x-y corrected localizations. Positions are
+    quantized on a 3D grid and the coinciding cells are counted for the 2R+1 shifts along z only; same two stages and
+    the same first-harmonic peak. The original uses one grid distance for x, y and z (all in pixels); here z has its
+    own grid distance `intersect_dz` in the units of z.
+Units of positions: px (z: any unit, see intersect_dz).
 """
 import numpy as np
 import torch
@@ -61,10 +65,39 @@ def _intersection_max(xy, seg, nseg, ref_xy, d, W, R, dev):
     return drift * d
 
 
-def aim(positions, framenum, interval=20, intersect_d=0.2, R=3, numframes=None, device='cuda'):
-    """Returns per-frame drift [F, 2] in px (zero mean), same sign convention as DME (corrected = pos - drift)."""
+def _intersection_max_z(q2, z, seg, nseg, ref_sel, dz, W, R, dev):
+    """z tracking of IntersectionMaxZ.m. q2: x-y grid key (x-y drift already removed), z: [N] in its own units.
+    Counts coinciding 3D grid cells with the reference for the 2R+1 shifts along z."""
+    W3 = W * W                                                          # key = qz * W^2 + (qy * W + qx)
+    keys = torch.round(z / dz).long() * W3 + q2
+    ru, rc = _unique_counts(keys if ref_sel is None else keys[ref_sel])
+    sh = torch.arange(-R, R + 1, device=dev) * W3
+    order = torch.argsort(seg)
+    bounds = torch.searchsorted(seg[order], torch.arange(nseg + 1, device=dev)).tolist()
+    drift = np.zeros(nseg)
+    ref = 0.0
+    for s in range(nseg):
+        k = keys[order[bounds[s]:bounds[s + 1]]]
+        if len(k) == 0:
+            drift[s] = drift[s - 1] if s else 0.0
+            continue
+        su, sc = _unique_counts(k)
+        q = (su + int(round(ref)) * W3)[None, :] + sh[:, None]              # [2R+1, M]
+        idx = torch.searchsorted(ru, q).clamp(max=len(ru) - 1)
+        cnt = (torch.where(ru[idx] == q, rc[idx], 0) * sc[None, :]).sum(1).double().cpu().numpy()
+        ref = round(ref) + _phase_peak(cnt, R)
+        drift[s] = -ref
+    return drift * dz
+
+
+def aim(positions, framenum, interval=20, intersect_d=0.2, R=3, numframes=None, device='cuda', intersect_dz=None):
+    """Returns per-frame drift [F, D] (zero mean), same sign convention as DME (corrected = pos - drift).
+    positions [N, 2] or [N, 3]: x, y in px. With a z column the z drift is tracked too (after x-y, as in the original
+    code); intersect_dz is the grid distance for z in the units of z (default intersect_d / 10: the paper's 20 nm for
+    100 nm pixels and z in um)."""
     dev = torch.device(device)
-    xy = torch.as_tensor(np.asarray(positions)[:, :2], dtype=torch.float64, device=dev)
+    positions = np.asarray(positions)
+    xy = torch.as_tensor(positions[:, :2], dtype=torch.float64, device=dev)
     fr = np.asarray(framenum).astype(np.int64)
     F = int(numframes or fr.max() + 1)
     nseg = max(2, F // interval)
@@ -82,4 +115,13 @@ def aim(positions, framenum, interval=20, intersect_d=0.2, R=3, numframes=None, 
     xy1 = xy - torch.as_tensor(d1[fr], device=dev)
     d2 = per_frame(_intersection_max(xy1, seg, nseg, xy1, intersect_d, W, R, dev))
     d = d1 + d2
+    if positions.shape[1] >= 3:
+        dz = float(intersect_dz if intersect_dz is not None else intersect_d / 10)
+        q2 = _keys(xy - torch.as_tensor(d[fr], device=dev), intersect_d, W)
+        z = torch.as_tensor(positions[:, 2], dtype=torch.float64, device=dev)
+        z = z - z.min() + 10 * dz
+        z1 = per_frame(_intersection_max_z(q2, z, seg, nseg, first, dz, W, R, dev)[:, None])[:, 0]
+        zc = z - torch.as_tensor(z1[fr], device=dev)
+        z2 = per_frame(_intersection_max_z(q2, zc, seg, nseg, None, dz, W, R, dev)[:, None])[:, 0]
+        d = np.concatenate([d, (z1 + z2)[:, None]], 1)
     return (d - d.mean(0)).astype(np.float32)

@@ -43,7 +43,7 @@ if m == 'dme_v2':
 elif m == 'aim':
     sys.path.insert(0, os.environ.get('DME_PATH', '/tmp/fast/wt'))
     from dme import aim
-    run = lambda: aim(p, f, interval=2000, intersect_d=0.1, numframes=F)
+    run = lambda: aim(p, f, interval=4000, intersect_d=0.1, intersect_dz=0.02, numframes=F)     # 3D
 elif m == 'rcc':
     sys.path.insert(0, os.environ.get('DME_PATH', '/tmp/fast/wt'))
     from dme import rcc_torch

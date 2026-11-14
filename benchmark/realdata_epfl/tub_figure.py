@@ -18,7 +18,9 @@ R = {}
 for m in ('new', 'legacy', 'comet'):
     z = np.load(f'{D}/drift/tub_{m}.npz')
     R.update({k: z[k] for k in z.files})
-KEY = {'dme_v2': 'dme_v2_3d', 'dme2021': 'dme2021_3d_250', 'aim': 'aim_2000_0.1', 'rcc': 'rccw_10000'}
+z = np.load(f'{D}/drift/aim3d.npz')                # 3D AIM (port), written by aim3d_run.py
+R.update({k: z[k] for k in z.files})
+KEY = {'dme_v2': 'dme_v2_3d', 'dme2021': 'dme2021_3d_250', 'aim': 'aim3d_4000_0.02', 'rcc': 'rccw_10000'}
 NAME = {'dme_v2': 'DME v2', 'dme2021': 'DME 2021', 'aim': 'AIM', 'rcc': 'RCC', 'comet': 'COMET'}
 
 
@@ -154,7 +156,7 @@ for line in open(f'{D}/drift/tub_bench.txt'):
 ax3 = fig.add_subplot(gbot[0, 2]); ax3.axis('off')
 ax3.set_title('Remaining drift error, run time, memory', fontsize=12, fontweight='bold', loc='left')
 rows = [('dme_v2', 'DME v2', 'dme_v2_3d'), ('comet', 'COMET', KEY['comet']), ('dme2021', 'DME 2021', 'dme2021_3d_250'),
-        ('aim', 'AIM', 'aim_2000_0.1'), ('rcc', 'RCC', KEY['rcc'])]
+        ('aim', 'AIM', KEY['aim']), ('rcc', 'RCC', KEY['rcc'])]
 zrcc = split('rccorig3d_5000')[2]
 cols = [0.38, 0.50, 0.60, 0.73, 0.87, 1.0]
 ax3.text((cols[0] + cols[2]) / 2 - 0.05, 0.965, 'error [nm RMS]', color=MUTED, ha='center', fontsize=9,
@@ -181,8 +183,8 @@ ax3.text(0, 0.02, 'Split-half test: the field is split into two halves by a 2 µ
          'score well even if they miss fast drift.', fontsize=8.6, color=MUTED, transform=ax3.transAxes, va='bottom',
          linespacing=1.4)
 fig.text(0.015, 0.012, f'Best setting of each method by this error: COMET {CFB}-frame windows (of {len(cs)}), DME 2021 '
-         f'250 frames/bin (of 2), AIM 2000 frames/bin (of 21), RCC {RFB} frames/bin, cubic spline (of 6); DME v2 has no '
-         'settings.\nAIM, RCC: 2D PyTorch ports of this package. * z of the 2021 RCC code. Time and GPU memory on an '
+         f'250 frames/bin (of 2), AIM 4000 frames/bin, 20 nm z grid (of 33), RCC {RFB} frames/bin, cubic spline (of 6); DME v2 has no '
+         'settings.\nAIM (3D), RCC (2D): PyTorch ports of this package. * z of the 2021 RCC code. Time and GPU memory on an '
          f'RTX 3090. DME 2021 (its limit) and COMET (run time; {bench["comet"]["ram"]:.0f} GB RAM) use the 1M most '
          'precise localizations.\nz in stage units. Code: github.com/qnano/drift-estimation', fontsize=8.0,
          color=MUTED, ha='left', va='bottom', linespacing=1.4)

@@ -24,7 +24,7 @@ than AIM, RCC and the 2021 DME code, although each of those was run at its best 
 (DME v2 has no settings). On a real DNA-PAINT nanoruler (the dataset in `example_data/`) it is also the most precise.
 On raw 3D dSTORM data with real drift (EPFL challenge microtubules, 6.7M localizations) its split-half error is
 0.3–0.4 nm in x and y and 1 nm in z. COMET at its best window length reaches the same x-y error (on the 1M most
-precise localizations, 4.5× slower); the 2021 code gives 0.5–0.8 nm, AIM and RCC 2–5 nm (figure below).
+precise localizations, 4.5× slower); the 2021 code gives 0.5–0.8 nm, AIM 1.5–1.8 nm and RCC 4–5 nm (figure below).
 It is slower than AIM and RCC: 3 s for 10k localizations, 20 s for 1M, 3 minutes for 10M on an RTX 3090.
 Details, tables and the settings searched: [docs/comparison.md](docs/comparison.md).
 
@@ -97,7 +97,7 @@ Repository
 
 | path | contents |
 |---|---|
-| `dme/` | the package: `dme_estimate`; `dme_prior.py` learned prior; `dme_grid.py` density-grid DME; `dme_pipeline.py` v1 and RCC; `aim_torch.py` AIM |
+| `dme/` | the package: `dme_estimate`; `dme_prior.py` learned prior; `dme_grid.py` density-grid DME; `dme_pipeline.py` v1 and RCC; `aim_torch.py` AIM (2D and 3D) |
 | `dme/weights/` | weights of the learned temporal prior |
 | `docs/` | [method.md](docs/method.md), [comparison.md](docs/comparison.md), figures |
 | `benchmark/` | the comparison: scripts and results |

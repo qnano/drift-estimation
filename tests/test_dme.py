@@ -56,3 +56,16 @@ def test_dme_class(device):
     # same result through the function interface
     drift = dme_estimate(pos, fr, crlb, estimatePrecision=False, device=device, verbose=False)
     assert np.allclose(drift, est.drift, atol=1e-4)
+
+
+
+@pytest.mark.parametrize('device', DEVICES)
+def test_aim_3d(device):
+    from dme import aim
+    pos, fr, crlb, gt = simulate(3, n_sites=400)
+    d2 = aim(pos[:, :2], fr, interval=20, intersect_d=0.2, device=device)
+    d3 = aim(pos, fr, interval=20, intersect_d=0.2, intersect_dz=0.1, device=device)
+    assert d2.shape == (len(gt), 2) and d3.shape == gt.shape
+    assert np.allclose(d2, d3[:, :2], atol=1e-5)          # x-y is not changed by the z step
+    e = rmsd(d3, gt)
+    assert (e < 0.05).all(), e                              # uncorrected: 0.33, 0.62 px and 0.17 um

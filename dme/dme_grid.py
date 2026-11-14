@@ -432,9 +432,9 @@ def dme_grid_estimate(positions, framenum, crlb, framesperbin, init='auto', scal
     def initial(kind, p, f):
         if kind == 'aim':
             iv = init_interval or int(np.clip(round(5000 * F / len(p)), framesperbin, max(framesperbin, F // 8)))
-            d = np.zeros((F, D), np.float32)
-            d[:, :2] = aim(p, f, interval=iv, intersect_d=2 * float(sig[:2].mean()), numframes=F, device=device)
-            return d
+            # 3D: AIM also tracks z (on the x-y corrected data), with a z grid of twice the z precision
+            return aim(p, f, interval=iv, intersect_d=2 * float(sig[:2].mean()), numframes=F, device=device,
+                       intersect_dz=2 * float(sig[2]) if D == 3 else None).astype(np.float32)
         if kind == 'rcc':
             return (rcc3d_torch if D == 3 else rcc_torch)(p, f, 10, 2, numframes=F, device=device)
         return np.zeros((F, D), np.float32)
