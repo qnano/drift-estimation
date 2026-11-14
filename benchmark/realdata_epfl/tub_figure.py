@@ -135,7 +135,7 @@ ax1.set_xlabel('frame'); ax1.set_ylabel('drift [nm]'); ax1.set_xlim(0, F)
 ax1.set_title('Drift estimated by DME v2', fontsize=12, fontweight='bold', loc='left')
 ax1.legend(frameon=False, fontsize=9, ncol=3, loc='upper right')
 ax2 = fig.add_subplot(gbot[0, 1])
-for m in ('rcc', 'aim', 'dme2021', 'comet', 'dme_v2'):
+for m in ('rcc', 'aim', 'dme2021', 'comet', 'dme_v2'):   # drawn back to front
     ax2.plot(t[T0:T1], nm(KEY[m] + '_all')[T0:T1, 0], color=COL[m], lw=2.0 if m == 'dme_v2' else 1.3, label=NAME[m])
 ax2.set_xlim(T0, T1); ax2.set_xlabel('frame'); ax2.set_ylabel('x drift [nm]')
 ax2.set_title('Part of the x trace, all methods', fontsize=12, fontweight='bold', loc='left')
@@ -149,8 +149,8 @@ for ax in (ax1, ax2):
 # table of split-half errors
 ax3 = fig.add_subplot(gbot[0, 2]); ax3.axis('off')
 ax3.set_title('Remaining drift error [nm RMS]', fontsize=12, fontweight='bold', loc='left')
-rows = [('dme_v2', 'DME v2', 'dme_v2_3d', 'none'), ('dme2021', 'DME 2021', 'dme2021_3d_250', '250 frames/bin'),
-        ('comet', 'COMET', KEY['comet'], f'{CFB} frames/window'),
+rows = [('dme_v2', 'DME v2', 'dme_v2_3d', 'none'), ('comet', 'COMET', KEY['comet'], f'{CFB} frames/bin'),
+        ('dme2021', 'DME 2021', 'dme2021_3d_250', '250 frames/bin'),
         ('aim', 'AIM', 'aim_2000_0.1', '2000 frames/bin'), ('rcc', 'RCC', KEY['rcc'], f'{RFB} frames/bin')]
 zrcc = split('rccorig3d_5000')[2]
 cols = [0.0, 0.40, 0.53, 0.65, 0.79]
@@ -177,7 +177,7 @@ ax3.text(0, 0.02, 'Split-half test: the field is split into two halves by a 2 µ
 fig.text(0.015, 0.012, f'AIM, RCC, DME 2021 and COMET at the setting with the smallest error (21, 6, 2 and {len(cs)} settings tried); '
          'DME v2 has no settings. AIM and RCC: 2D PyTorch ports of this package, RCC with cubic-spline interpolation.\n'
          '* z of the 2021 RCC code (5000 frames/bin). DME 2021 (its limit) and COMET (run time) use the 1M most precise localizations. '
-         'z in stage units of the bead calibration. Code: github.com/jcnossen/drift-estimation', fontsize=8.2,
+         'z in stage units of the bead calibration. Code: github.com/qnano/drift-estimation', fontsize=8.2,
          color=MUTED, ha='left', va='bottom', linespacing=1.45)
 fig.savefig(f'{D}/drift/tub_figure.png', dpi=150, facecolor='white')
 print('saved')

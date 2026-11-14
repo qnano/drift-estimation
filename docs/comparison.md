@@ -101,9 +101,9 @@ Tubulin:
 | method | error x (nm) | error y (nm) | error z (nm) | runtime, all data (s) | best setting (of) |
 |---|---|---|---|---|---|
 | **DME v2** | **0.30** | **0.37** | **1.0** | 120 | – |
+| COMET (2D) | 0.44 | 0.40 | – | 310 | 1000-frame windows, 10 nm (2 so far), best 1M localizations |
 | DME 2021 (3D) | 0.50 | 0.78 | 1.0 | 49 | 250 frames per bin (2), best 1M localizations |
 | DME 2021 (2D) | 0.44 | 1.29 | – | 12 | 1000 frames per bin (5), best 1M localizations |
-| COMET (2D) | 0.61 | 0.69 | – | 490 | 250-frame windows, 10 nm (1 so far), best 1M localizations |
 | AIM (2D) | 2.4 | 4.4 | – | 1 | 2000 frames per bin, 0.1 px (21) |
 | RCC (2D) | 3.9 | 4.8 | – | <1 | 10000 frames per bin (6) |
 | RCC 2021 code (3D) | 4.5 | 8.3 | 13 | 38 | 5000 frames per bin (3) |
@@ -119,7 +119,7 @@ Nuclear pores:
 | RCC 2021 code (3D) | 4.3 | 3.4 | 14 | 10000 frames per bin (3) |
 
 Notes: COMET was run on the 1M most precise localizations of each subset: on a full half (3.4M) one run did not
-finish in 40 minutes and used 66 GB of RAM; only one of its six window lengths has finished so far. AIM here is the
+finish in 40 minutes and used 66 GB of RAM; two of its six window lengths have finished so far (250 frames: 0.61 / 0.69 nm). AIM here is the
 2D PyTorch port in this package. "RCC (2D)" is `rcc_torch` with `maxdrift_px=10`, the peak search
 window of the 2021 RCC code; with its default (whole image) it fails on these sparse dSTORM time bins. For tubulin the
 RCC bins are interpolated with a cubic spline (3.3 / 4.5 nm with linear interpolation); for the pores linearly. The pixel size
