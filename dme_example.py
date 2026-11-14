@@ -6,7 +6,7 @@ Runs on a CUDA GPU if available, otherwise on the CPU (slower).
 import numpy as np
 import matplotlib.pyplot as plt
 
-from dme import dme_estimate, precision
+from dme import DME, dme_estimate
 
 
 def smlm_simulation(drift_trace, fov_width, loc_error, n_sites, n_frames, on_prob=0.1, seed=0):
@@ -31,15 +31,16 @@ localizations, framenum = smlm_simulation(drift_trace, fov_width, loc_error, n_s
 crlb = np.tile(loc_error, (len(localizations), 1)).astype(np.float32)
 print(f"Total localizations: {len(localizations)}")
 
-# DME v2 (default): chooses the temporal resolution itself, learned temporal prior
-drift, (set1, set2) = dme_estimate(localizations, framenum, crlb)
+# DME v2: chooses the temporal resolution itself, learned temporal prior
+est = DME().fit(localizations, framenum, crlb)
+drift = est.drift
 # Algorithm of the 2021 paper (exact pairwise objective, RCC start) with a spline knot every 20 frames
 drift_v1 = dme_estimate(localizations, framenum, crlb, framesperbin=20, method='v1', estimatePrecision=False)
 
 for name, d in [('v2', drift), ('v1', drift_v1)]:
     rmsd = np.sqrt(np.mean((d - d.mean(0) - drift_trace) ** 2, 0))
     print(f"DME {name}: RMSD vs true drift = {rmsd} (px, px, um)")
-print(f"Split-half precision estimate (v2): {precision(set1, set2)}")
+print(f"Split-half precision estimate (v2): {est.precision()}")
 
 fig, ax = plt.subplots(3, figsize=(7, 6), sharex=True)
 for i in range(3):

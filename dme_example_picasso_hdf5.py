@@ -6,7 +6,7 @@ import os
 import shutil
 import h5py
 import numpy as np
-from dme import dme_estimate
+from dme import DME
 
 fn = 'example_data/gattaquant 80nm RY.hdf5'
 with h5py.File(fn, 'r') as f:
@@ -16,11 +16,12 @@ print(f"{len(locs)} localizations")
 pos = np.stack([locs['x'], locs['y']], 1)
 crlb = np.stack([locs['lpx'], locs['lpy']], 1)
 
-drift, (set1, set2) = dme_estimate(pos, locs['frame'], crlb, pixelsize=108.3, display=True)  # pixelsize: nm, for the plot
+est = DME(verbose=True).fit(pos, locs['frame'], crlb)
+print('split-half precision [px]:', est.precision())      # optional: estimates again on two halves of the data
+est.plot(pixelsize=108.3)                                  # pixelsize in nm, for the axis units
 
 corrected = locs.copy()
-corrected['x'] -= drift[locs['frame'], 0]
-corrected['y'] -= drift[locs['frame'], 1]
+corrected['x'], corrected['y'] = est.apply(pos, locs['frame']).T
 base = os.path.splitext(fn)[0]
 out = base + '-drift-corrected'
 with h5py.File(out + '.hdf5', 'w') as f:

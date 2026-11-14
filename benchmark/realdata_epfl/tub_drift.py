@@ -59,13 +59,14 @@ elif mode == 'comet':                       # pip install comet-smlm; 2D, at mos
 
     def comet(fpb, tsig):
         def run(pp, ff, cc):
+            pp, ff, cc = best1m(pp, ff, cc)     # all 3.4M of a half: > 40 min and 66 GB RAM per run
             ds = np.zeros((len(pp), 4))
             ds[:, 0], ds[:, 1], ds[:, 3] = pp[:, 0] * PXX, pp[:, 1] * PXY, ff
             d = np.asarray(comet_run_kd(ds, segmentation_mode=2, segmentation_var=int(fpb), max_drift_nm=300,
                                         target_sigma_nm=tsig, min_max_frames=(0, F - 1), random_state=0))[:F, :2]
             return d / np.array([PXX, PXY])
         return run
-    methods = {f'comet_{fpb}_10': comet(fpb, 10.0) for fpb in (250, 100, 500, 50, 1000, 2500)}
+    methods = {f'comet_{fpb}_10': comet(fpb, 10.0) for fpb in (250, 1000, 100, 2500, 500, 50)}
 else:
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
     from dme import dme_estimate, aim, rcc_torch

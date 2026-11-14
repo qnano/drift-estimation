@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import torch
 
-from dme import dme_estimate
+from dme import DME, dme_estimate
 
 DEVICES = ['cpu'] + (['cuda'] if torch.cuda.is_available() else [])
 
@@ -41,3 +41,18 @@ def test_perspot_v1(device):
     drift = dme_estimate(pos, fr, crlb, 20, method='v1', perSpotCRLB=True, estimatePrecision=False,
                          device=device, verbose=False)
     assert (rmsd(drift, gt) < 0.05).all()
+
+
+@pytest.mark.parametrize('device', DEVICES)
+def test_dme_class(device):
+    pos, fr, crlb, gt = simulate(2)
+    est = DME(device=device)
+    with pytest.raises(RuntimeError):
+        est.apply(pos, fr)
+    assert est.fit(pos, fr, crlb) is est
+    assert est.drift.shape == gt.shape and (rmsd(est.drift, gt) < 0.05).all()
+    assert np.allclose(est.apply(pos, fr), pos - est.drift[fr])
+    assert est.precision().shape == (2,) and (est.precision() < 0.1).all()
+    # same result through the function interface
+    drift = dme_estimate(pos, fr, crlb, estimatePrecision=False, device=device, verbose=False)
+    assert np.allclose(drift, est.drift, atol=1e-4)

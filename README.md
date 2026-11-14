@@ -41,22 +41,29 @@ Usage
 -----
 
 ```python
-from dme import dme_estimate
+from dme import DME
 
 # positions: [N, 2] or [N, 3] (e.g. x, y in pixels, z in microns), framenum: [N], crlb: [N, D] localization precision
-drift, (drift_set1, drift_set2) = dme_estimate(positions, framenum, crlb)
-corrected = positions - drift[framenum]
+est = DME().fit(positions, framenum, crlb)
+corrected = est.apply(positions, framenum)        # positions - est.drift[framenum]
 ```
 
-- `dme_estimate(positions, framenum, crlb)`: DME v2. The temporal resolution is chosen automatically; there is no
-  `framesperbin` to set.
-- `method='v1', framesperbin=100`: the algorithm of the 2021 paper (exact pairwise objective, RCC start), on the GPU.
-  Supports per-localization CRLBs (`perSpotCRLB=True`).
-- `gpuMemoryGB=8`: GPU memory the estimation may use (or what is free, if less). Everything stays on the GPU; the
-  work is split into smaller chunks when less memory is allowed. The localizations themselves must fit (about 1.5 GB
-  for 7M localizations).
-- `drift_set1`/`drift_set2` are estimates from two halves of the data; `dme.precision(drift_set1, drift_set2)` gives
-  their RMS difference as an indication of the precision. Disable with `estimatePrecision=False`.
+The class `DME` runs DME v2; there is no temporal resolution or other setting to choose.
+
+- `est.drift`: the drift per frame, `[F, D]`, in the units of the positions.
+- `est.precision()`: estimates the drift again on two halves of the data and returns their RMS difference per axis, an
+  indication of the precision (about doubles the run time). The two traces are in `est.drift_halves`.
+- `est.plot(pixelsize=...)`: figure of the trace.
+- `DME(device=..., gpu_memory_gb=8, isotropic3d=False, verbose=False)`: `gpu_memory_gb` is the GPU memory the
+  estimation may use (or what is free, if less). Everything stays on the GPU; the work is split into smaller chunks
+  when less memory is allowed. The localizations themselves must fit (about 1.5 GB for 7M localizations).
+- `fit(..., numframes=..., max_spots=...)`: the movie length, if the last frames have no localizations; `max_spots`
+  uses only the most precise localizations.
+
+The function `dme_estimate(positions, framenum, crlb, ...)` of earlier versions still works with the same arguments;
+by default it runs DME v2 and returns `drift, (drift_set1, drift_set2)`. It is also the way to run the algorithm of
+the 2021 paper: `dme_estimate(positions, framenum, crlb, framesperbin=100, method='v1')` (exact pairwise objective, RCC
+start, optional per-localization CRLBs with `perSpotCRLB=True`).
 
 Examples:
 - [dme_example.py](dme_example.py): 3D simulation with known drift, DME v2 and v1.

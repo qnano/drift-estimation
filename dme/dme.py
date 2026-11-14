@@ -1,7 +1,11 @@
 """
 Drift estimation by entropy minimization (DME), GPU implementation in PyTorch (+ optional CuPy kernels).
 
-    from dme import dme_estimate
+    from dme import DME
+    est = DME().fit(positions, framenum, crlb)          # DME v2
+    corrected = est.apply(positions, framenum)
+
+    from dme import dme_estimate                                    # function interface (compatibility, 'v1')
     drift, (drift_set1, drift_set2) = dme_estimate(positions, framenum, crlb)
 
 method='v2' (default): density-grid evaluation of the DME objective, multi-start initialization (AIM, RCC, zero;
@@ -21,6 +25,100 @@ import numpy as np
 
 from . import dme_gpu
 from .dme_gpu import default_device
+
+class DME:
+    """DME v2: drift estimation by entropy minimization with a learned temporal prior. Nothing to tune.
+
+        est = DME()                       # device=None: CUDA if available
+        est.fit(positions, framenum, crlb)           # positions [N, 2 or 3], framenum [N], crlb [N, D] or [D]
+        corrected = est.apply(positions, framenum)   # positions - drift[framenum]
+        est.drift                                    # [F, D], zero mean, same units as positions
+        est.precision()                              # optional: RMS difference of two half-data estimates, per axis
+        est.plot(pixelsize=108.3)                    # optional: matplotlib figure of the trace(s)
+
+    device:         torch device; default 'cuda' if available, else 'cpu'
+    gpu_memory_gb:  GPU memory the estimation may use (or what is free on the device, if less). Everything stays on
+                    the GPU; the work is split into smaller chunks when less memory is allowed
+    isotropic3d:    3D data: evaluate the objective in 3D instead of on the x-y and x-z projections. Only worth it for
+                    very dense 3D samples where structures at different depths overlap in projection; much slower
+    verbose:        print progress
+    """
+
+    def __init__(self, device=None, gpu_memory_gb=8.0, isotropic3d=False, verbose=False):
+        self.device = default_device(device)
+        self.gpu_memory_gb = float(gpu_memory_gb)
+        self.isotropic3d = isotropic3d
+        self.verbose = verbose
+        self.drift = None           # [F, D] after fit()
+        self.drift_halves = None    # (drift_set1, drift_set2) after precision()
+        self.runtime = None         # seconds of the last fit()
+        self.numframes = None
+        self._data = None
+
+    def _estimate(self, p, f, c, verbose):
+        from .dme_prior import dme_prior_estimate
+        dme_gpu.GPU_MEMORY_LIMIT_GB = self.gpu_memory_gb
+        return dme_prior_estimate(p, f, c, numframes=self.numframes, device=self.device, verbose=verbose,
+                                  isotropic3d=self.isotropic3d)
+
+    def fit(self, positions, framenum, crlb, numframes=None, max_spots=None):
+        """Estimate the drift. positions [N, D] (D = 2 or 3; e.g. x, y in pixels and z in microns), framenum [N]
+        (integers from 0), crlb [N, D] or [D]: localization precision in the units of positions.
+        numframes: number of frames of the movie (default: max(framenum) + 1).
+        max_spots: if set, use only the max_spots localizations with the smallest CRLB.
+        Returns self; the drift is in self.drift."""
+        positions = np.ascontiguousarray(positions, dtype=np.float32)
+        framenum = np.ascontiguousarray(framenum, dtype=np.int32)
+        D = positions.shape[1]
+        crlb = np.asarray(crlb, dtype=np.float32)
+        if crlb.ndim == 1:
+            crlb = np.broadcast_to(crlb[:D], positions.shape)
+        crlb = np.ascontiguousarray(crlb[:, :D])
+        self.numframes = int(numframes if numframes is not None else framenum.max() + 1)
+        if max_spots is not None and max_spots < len(positions):
+            best = np.sort(np.argsort(np.prod(crlb, 1))[:max_spots])
+            if self.verbose:
+                print(f"DME: using the {max_spots}/{len(positions)} localizations with the smallest CRLB")
+            positions, framenum, crlb = positions[best], framenum[best], crlb[best]
+        self._data = positions, framenum, crlb
+        self.drift_halves = None
+        t0 = time.time()
+        self.drift = self._estimate(positions, framenum, crlb, self.verbose)
+        self.runtime = time.time() - t0
+        if self.verbose:
+            print(f"DME (device={self.device}): {self.runtime:.1f}s", flush=True)
+        return self
+
+    def apply(self, positions, framenum):
+        """Drift-corrected copy of positions [N, D'] (D' <= D of the fit): positions - drift[framenum]."""
+        self._check()
+        positions = np.asarray(positions)
+        return positions - self.drift[np.asarray(framenum), :positions.shape[1]].astype(positions.dtype)
+
+    def precision(self):
+        """Estimate the drift again on two halves of the data (split at the median along the widest of x, y) and
+        return the RMS difference of the two traces per axis: an indication of the precision. About doubles the
+        run time. The two traces are kept in self.drift_halves."""
+        self._check()
+        p, f, c = self._data
+        if self.drift_halves is None:
+            ax = int(np.argmax(np.var(p[:, :2], 0)))
+            s1 = p[:, ax] > np.median(p[:, ax])
+            self.drift_halves = (self._estimate(p[s1], f[s1], c[s1], False),
+                                 self._estimate(p[~s1], f[~s1], c[~s1], False))
+        return precision(*self.drift_halves)
+
+    def plot(self, pixelsize=None):
+        """Matplotlib figure of the drift trace (and of the two half-data traces if precision() was called).
+        pixelsize: nm per pixel, to show x and y in nm."""
+        self._check()
+        d1, d2 = self.drift_halves if self.drift_halves is not None else (None, None)
+        return plot_drift(self.drift, d1, d2, pixelsize)
+
+    def _check(self):
+        if self.drift is None:
+            raise RuntimeError("DME: call fit(positions, framenum, crlb) first")
+
 
 _IGNORED_LEGACY_ARGS = ('useCuda', 'maxNeighbors', 'useDebugLibrary', 'traces')
 
@@ -46,6 +144,9 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
                  gpuMemoryGB=8,
                  **legacy_kwargs):
     """
+    Function interface, kept for compatibility with earlier versions and for the 2021 algorithm (method='v1').
+    New code: use DME (DME v2) instead.
+
     Estimate drift by entropy minimization.
 
     positions:     [N, D] localizations (D = 2 or 3), e.g. x, y in pixels and z in microns
@@ -112,19 +213,15 @@ def dme_estimate(positions, framenum, crlb, framesperbin=None, imgshape=None,
     t0 = time.time()
 
     if method == 'v2' and framesperbin is None:
-        from .dme_prior import dme_prior_estimate
         if init is not None:
             warnings.warn("initialEstimate is ignored when framesperbin is None")
-        est = lambda p, f, c, vb: dme_prior_estimate(p, f, c, numframes=F, device=device, verbose=vb,
-                                                      isotropic3d=isotropic3d)
-        drift_all = est(positions, framenum, crlb, verbose)
+        e = DME(device=device, gpu_memory_gb=gpuMemoryGB, isotropic3d=isotropic3d, verbose=verbose)
+        e.fit(positions, framenum, crlb, numframes=F)
         if estimatePrecision:
-            ax = int(np.argmax(np.var(positions[:, :2], 0)))
-            s1 = positions[:, ax] > np.median(positions[:, ax])
-            r = drift_all, (est(positions[s1], framenum[s1], crlb[s1], False),
-                            est(positions[~s1], framenum[~s1], crlb[~s1], False))
+            e.precision()
+            r = e.drift, e.drift_halves
         else:
-            r = drift_all
+            r = e.drift
     elif method == 'v2':
         from .dme_grid import dme_grid_estimate
         r = dme_grid_estimate(positions, framenum, crlb.mean(0), framesperbin,
