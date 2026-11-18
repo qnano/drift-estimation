@@ -35,6 +35,16 @@ def test_simulation(device, method, fpb, D):
 
 
 @pytest.mark.parametrize('device', DEVICES)
+@pytest.mark.parametrize('prior', ['default', 'small'])
+def test_prior_weights(device, prior):
+    from dme.dme_prior import dme_prior_estimate, _get_net
+    net = _get_net(device, prior)
+    assert sum(p.numel() for p in net.parameters()) == {'default': 333377, 'small': 42529}[prior]
+    pos, fr, crlb, gt = simulate(2)
+    drift = dme_prior_estimate(pos, fr, crlb[0], device=device, verbose=False, prior=prior)
+    assert (rmsd(drift, gt) < 0.05).all(), rmsd(drift, gt)
+
+@pytest.mark.parametrize('device', DEVICES)
 def test_perspot_v1(device):
     pos, fr, crlb, gt = simulate(2)
     crlb = crlb * np.random.default_rng(1).uniform(0.7, 1.4, (len(pos), 1)).astype(np.float32)

@@ -8,6 +8,12 @@ correlation (up to 0.85, as measured for multi-frame binding events), occasional
 loss is the per-sequence RMS error of the denoised trace (mean removed). Sequence lengths 32-12000 segments.
 
     python training/train_temporal_prior.py --steps 15000 --out dme/weights/temporal_prior.pt    # ~1 h on an RTX 3090
+    python training/train_temporal_prior.py --channels 32 --share --seed 3 --out dme/weights/temporal_prior_small.pt
+
+The second one is the small prior (dme_prior_estimate(prior='small'), and the network webSMLM ships as int8): 32
+channels, the two dilation cycles sharing their weights, 42.5k instead of 333k parameters. On held-out simulated
+sequences (mean over lengths 32-300, 300-3000 and 3000-12000 segments) its RMS error is 0.98 sigma, against 0.84 for
+the default prior; a Kalman smoother (random-walk drift) gives 1.55.
 """
 import os, math, time, argparse
 import numpy as np
@@ -104,12 +110,12 @@ def make_batch(B, T, g, dev):
     return x + e, s, valid, x
 
 
-def train(steps, out, lr=1e-3, seed=2):
+def train(steps, out, lr=1e-3, seed=2, channels=64, share=False):
     dev = torch.device('cuda')
     g = torch.Generator(device=dev).manual_seed(seed)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    net = Smoother3().to(dev)
+    net = Smoother3(C=channels, share=share).to(dev)
     nn.init.zeros_(net.out.weight); nn.init.zeros_(net.out.bias)
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
     sch = torch.optim.lr_scheduler.OneCycleLR(opt, lr, total_steps=steps, pct_start=0.05)
@@ -138,5 +144,8 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--steps', type=int, default=15000)
     ap.add_argument('--out', default=WEIGHTS)
+    ap.add_argument('--channels', type=int, default=64)
+    ap.add_argument('--share', action='store_true', help='the dilation cycles share their weights')
+    ap.add_argument('--seed', type=int, default=2)
     a = ap.parse_args()
-    train(a.steps, a.out)
+    train(a.steps, a.out, seed=a.seed, channels=a.channels, share=a.share)

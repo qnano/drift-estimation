@@ -23,7 +23,7 @@ setup(
     ],
     packages=['dme'],
     include_package_data=True,
-    package_data={"dme": ["weights/temporal_prior.pt"]},   # learned temporal prior of method='v2' 
+    package_data={"dme": ["weights/temporal_prior.pt", "weights/temporal_prior_small.pt"]},   # learned temporal priors of method='v2'
     python_requires='>=3.8',
     install_requires=['numpy', 'scipy', 'matplotlib', 'torch'],
     extras_require={

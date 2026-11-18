@@ -17,7 +17,8 @@ smoother:
      of the field of view is scored by the DME objective of the other half, and vice versa. The fixed-spline
      estimate (no smoother) is one of the candidates, so it falls back to that when the smoother does not help.
 
-The network weights are in dme/weights/temporal_prior.pt. Uses the mean of the given CRLBs.
+The network weights are in dme/weights/temporal_prior.pt (prior='small': temporal_prior_small.pt, 32 channels with
+shared weights, the one webSMLM ships). Uses the mean of the given CRLBs.
 """
 import itertools
 import math
@@ -31,7 +32,10 @@ from .dme_grid import DMEGrid, dme_grid_estimate, choose_backend
 from .dme_gpu import cupy_available, mem_scale
 
 WEIGHTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'weights', 'temporal_prior.pt')
+WEIGHTS_SMALL = os.path.join(os.path.dirname(WEIGHTS), 'temporal_prior_small.pt')
+PRIORS = {'default': WEIGHTS, 'small': WEIGHTS_SMALL}
 LAGS = (1, 2, 4, 8)
+CYCLE = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)    # dilations of one cycle of residual blocks
 _nets = {}
 
 
@@ -64,11 +68,29 @@ class Smoother3(nn.Module):
     """Input: per-segment measurements z [B, T], their standard deviations s [B, T] and validity [B, T].
     Output: smoothed drift [B, T]."""
 
-    def __init__(self, C=64, dils=(1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512)):
+    def __init__(self, C=64, dils=CYCLE * 2, share=False):
+        """C channels; one residual block per dilation in dils. share: every dilation cycle after the first reuses
+        the first cycle's blocks (same weights; the state_dict still lists every position)."""
         super().__init__()
         self.inp = nn.Conv1d(3 + len(LAGS), C, 1)
-        self.blocks = nn.Sequential(*[_Block(C, d) for d in dils])
+        blocks = [_Block(C, d) for d in dils]
+        if share:
+            n = len(CYCLE)
+            assert len(dils) % n == 0 and tuple(dils) == CYCLE * (len(dils) // n), dils
+            blocks = blocks[:n] * (len(dils) // n)
+        self.blocks = nn.Sequential(*blocks)
         self.out = nn.Conv1d(C, 1, 1)
+
+    @classmethod
+    def from_state_dict(cls, sd):
+        """The network that sd belongs to: channel count, number of blocks and weight sharing read from sd."""
+        nb = 1 + max(int(k.split('.')[1]) for k in sd if k.startswith('blocks.'))
+        n = len(CYCLE)
+        share = nb > n and all(torch.equal(sd[k], sd[k.replace(f'blocks.{i}.', f'blocks.{i % n}.', 1)])
+                               for i in range(n, nb) for k in sd if k.startswith(f'blocks.{i}.'))
+        net = cls(C=sd['inp.weight'].shape[0], dils=CYCLE * (nb // n), share=share)
+        net.load_state_dict(sd)
+        return net
 
     @staticmethod
     def features(z, s, valid):
@@ -95,12 +117,13 @@ class Smoother3(nn.Module):
         return zf - e * s_used
 
 
-def _get_net(device):
-    key = str(device)
+def _get_net(device, prior='default'):
+    """prior: 'default' (temporal_prior.pt, 64 channels), 'small' (temporal_prior_small.pt, 32 channels, shared
+    weights; 8x fewer parameters, about 17 % larger error on simulated drift) or the path of a Smoother3 state_dict."""
+    path = PRIORS.get(prior, prior)
+    key = (str(device), path)
     if key not in _nets:
-        net = Smoother3()
-        net.load_state_dict(torch.load(WEIGHTS, map_location='cpu', weights_only=True))
-        _nets[key] = net.to(device).eval()
+        _nets[key] = Smoother3.from_state_dict(torch.load(path, map_location='cpu', weights_only=True)).to(device).eval()
     return _nets[key]
 
 
@@ -271,8 +294,8 @@ def seg_measurements(pos, fr, sig, F, d_frames, L, device, trust=1.5, backend='a
 
 
 @torch.no_grad()
-def smooth_net(z, info, device):
-    net = _get_net(device)
+def smooth_net(z, info, device, prior='default'):
+    net = _get_net(device, prior)
     T, D = z.shape
     if D > 2:
         valid_all = np.array([np.linalg.det(m) > 0 for m in info])
@@ -300,13 +323,13 @@ def seg_to_frames(xseg, L, F):
     return np.stack([np.interp(f, tc, xseg[:, d]) for d in range(xseg.shape[1])], 1)
 
 
-def refine(pos, frame, sig, F, d, L, scales, device, backend='auto'):
+def refine(pos, frame, sig, F, d, L, scales, device, backend='auto', prior='default'):
     """Learned-prior refinement of drift d [F, D] with segment length L, coarse to fine over kernel widths."""
     if (F + L - 1) // L < 24:
         return d
     for sc in scales:
         z, info = seg_measurements(pos, frame, sig * sc, F, d, L, device, backend=backend)
-        d = seg_to_frames(smooth_net(z, info, device), L, F)
+        d = seg_to_frames(smooth_net(z, info, device, prior), L, F)
         d = d - d.mean(0)
     return d
 
@@ -338,9 +361,12 @@ def checkerboard(pos, ntiles=8, min_frac=0.3):
 
 def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda', scales=(4, 2, 1, 1, 1),
                     L_frames=(1, 2, 3, 6, 12, 24, 48, 96, 192), fpb_divs=(1, 10), ntiles=8, min_locs_per_seg=30,
-                    verbose=True, return_info=False, isotropic3d=False):
+                    verbose=True, return_info=False, isotropic3d=False, prior='default'):
     """Drift [F, D] in the units of positions (corrected = positions - drift[framenum]).
     crlb: [N, D] or [D]; the mean CRLB is used.
+    prior: the learned temporal prior, 'default' (temporal_prior.pt), 'small' (temporal_prior_small.pt: 32 channels,
+    weights shared between the two dilation cycles, 42.5k instead of 333k parameters, about 17 % larger error on
+    simulated drift) or the path of a Smoother3 state_dict.
     Every evaluation of the objective uses the density grid or exact pair sums (spatial hash), whichever is cheaper.
     Candidates of the cross-fit: the fixed spline (two bin lengths), the learned prior on segments of 1-192 frames, and,
     with at least min_locs_per_seg localizations per frame, a drift value per frame without prior.
@@ -356,7 +382,7 @@ def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda',
     crlb = np.broadcast_to(crlb[:D], pos.shape) if crlb.ndim == 1 else crlb.reshape(-1, D)
     if D == 3 and not isotropic3d:
         kw = dict(numframes=F, device=device, scales=scales, L_frames=L_frames, fpb_divs=fpb_divs, ntiles=ntiles,
-                  min_locs_per_seg=min_locs_per_seg, verbose=verbose, return_info=True)
+                  min_locs_per_seg=min_locs_per_seg, verbose=verbose, return_info=True, prior=prior)
         dxy, info_xy = dme_prior_estimate(pos[:, :2], frame, crlb[:, :2], **kw)
         s = float(crlb[:, 0].mean() / crlb[:, 2].mean())   # z in units where its precision equals x's
         xz = np.stack([pos[:, 0] - dxy[frame, 0], pos[:, 2] * s], 1)
@@ -388,7 +414,7 @@ def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda',
         cv[('dme', fpb, 0)] = (dme_score(*halves[1], sig, F, d0[0], device, be) +
                                dme_score(*halves[0], sig, F, d0[1], device, be))
         for L in Ls:
-            dh = [refine(p, f, sig, F, d, L, scales, device, be) for (p, f), d in zip(halves, d0)]
+            dh = [refine(p, f, sig, F, d, L, scales, device, be, prior) for (p, f), d in zip(halves, d0)]
             cv[('smooth', fpb, L)] = (dme_score(*halves[1], sig, F, dh[0], device, be) +
                                       dme_score(*halves[0], sig, F, dh[1], device, be))
     kind, fpb, L = max(cv, key=cv.get)
@@ -399,7 +425,7 @@ def dme_prior_estimate(positions, framenum, crlb, numframes=None, device='cuda',
               flush=True)
     d = v2(pos, frame, fpb, np.asarray(0.5 * (starts[fpb][0] + starts[fpb][1]), np.float32))   # same drift in both halves
     if kind == 'smooth':
-        d = refine(pos, frame, sig, F, d, L, scales, device, be)
+        d = refine(pos, frame, sig, F, d, L, scales, device, be, prior)
     d = np.asarray(d, np.float32)
     if return_info:
         return d, dict(start_framesperbin=fpb, segment_frames=L if kind == 'smooth' else None, cv=cv)

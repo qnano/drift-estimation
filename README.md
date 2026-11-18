@@ -98,7 +98,7 @@ Repository
 | path | contents |
 |---|---|
 | `dme/` | the package: `dme_estimate`; `dme_prior.py` learned prior; `dme_grid.py` density-grid DME; `dme_pipeline.py` v1 and RCC; `aim_torch.py` AIM (2D and 3D) |
-| `dme/weights/` | weights of the learned temporal prior |
+| `dme/weights/` | weights of the learned temporal prior: `temporal_prior.pt` (default) and `temporal_prior_small.pt` (`dme_prior_estimate(..., prior='small')`: 32 channels with shared weights, 8x fewer parameters, about 17 % larger error on simulated drift; the network webSMLM ships) |
 | `docs/` | [method.md](docs/method.md), [comparison.md](docs/comparison.md), figures |
 | `benchmark/` | the comparison: scripts and results |
 | `training/` | training of the temporal prior (synthetic data only) |
@@ -114,3 +114,8 @@ the code of the paper. `dme_estimate` still accepts the arguments of the old Pyt
 applied to the C++ code). Known problems of that code, absent in this version: its neighbor list is not updated often
 enough, so it can stop before reaching the optimum; above a few million localizations an integer overflow makes it
 return zero drift; and its `maxspots` option kept the least precise localizations instead of the most precise.
+
+Licence
+-------
+
+MIT, see [LICENSE](LICENSE). This covers the code and the network weights in `dme/weights/`.
